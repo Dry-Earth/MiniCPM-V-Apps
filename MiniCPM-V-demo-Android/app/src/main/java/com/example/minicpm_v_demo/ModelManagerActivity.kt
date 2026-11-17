@@ -148,7 +148,7 @@ class ModelManagerActivity : AppCompatActivity() {
                     topK = settings.topK,
                     topP = settings.topP,
                     nUbatch = settings.nUbatch,
-                    moeSlotBank = settings.moeSlotBank,
+                    moeSlotBank = settings.effectiveMoeSlotBank(model.isMoe),
                 )
                 if (settings.systemPrompt.isNotBlank()) {
                     engine.setSystemPrompt(settings.systemPrompt)
@@ -373,7 +373,7 @@ class ModelManagerActivity : AppCompatActivity() {
                     topK = settings.topK,
                     topP = settings.topP,
                     nUbatch = settings.nUbatch,
-                    moeSlotBank = settings.moeSlotBank,
+                    moeSlotBank = settings.effectiveMoeSlotBank(model.isMoe),
                 )
                 // Empty by default (no system prompt), matching upstream; a
                 // non-empty one must be injected before the first user turn.

@@ -223,7 +223,7 @@
     <string name="params_slice_title">图片切片数</string>
     <string name="params_slice_hint">1 最快，9 最清晰</string>
     <string name="params_moe_title">MoE 专家槽位</string>
-    <string name="params_moe_hint">仅 35B-A3B 这类专家模型需要，槽位越多越快也越占内存</string>
+    <string name="params_moe_hint">仅 35B-A3B 这类专家模型需要；自动 = 256 槽位，越多越快也越占内存</string>
     <string name="params_thinking_title">思考模式</string>
     <string name="params_thinking_hint">先输出 think 过程再回答，支持该模式的模型才有区别</string>
     <string name="params_system_prompt_title">系统提示词</string>

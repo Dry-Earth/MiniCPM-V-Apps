@@ -220,7 +220,7 @@
     <string name="params_slice_title">Image slices</string>
     <string name="params_slice_hint">1 is fastest, 9 is sharpest</string>
     <string name="params_moe_title">MoE expert slots</string>
-    <string name="params_moe_hint">Only used by expert models such as 35B-A3B; more slots is faster and heavier</string>
+    <string name="params_moe_hint">Only used by expert models such as 35B-A3B; auto = 256 slots, more slots is faster and heavier</string>
     <string name="params_thinking_title">Thinking mode</string>
     <string name="params_thinking_hint">Emit a think block before the answer; only models that support it differ</string>
     <string name="params_system_prompt_title">System prompt</string>

@@ -34,6 +34,19 @@ data class InferenceSettings(
     fun effectiveMaxTokens(): Int =
         if (maxTokens <= 0) UNLIMITED_TOKENS else maxTokens
 
+    /**
+     * llama.cpp rejects an `les.moe` file whose slot bank is 0 with
+     * "moe_slot_bank is non-zero but the model file declares no ..." style
+     * errors, so "auto" cannot mean "leave it at 0" for those models. The
+     * default matches the value the iOS client uses for the same 35B-A3B
+     * checkpoint; the settings screen can lower it if RAM is tight.
+     */
+    fun effectiveMoeSlotBank(isMoe: Boolean): Int = when {
+        !isMoe -> 0
+        moeSlotBank > 0 -> moeSlotBank
+        else -> DEFAULT_MOE_SLOT_BANK
+    }
+
     companion object {
         const val DEFAULT_MAX_TOKENS = 1024
         const val DEFAULT_TEMPERATURE = 0.7f
@@ -52,6 +65,7 @@ data class InferenceSettings(
         const val MIN_IMAGE_SLICE = 1
         const val MAX_IMAGE_SLICE = 9
         const val MAX_MOE_SLOT_BANK = 256
+        const val DEFAULT_MOE_SLOT_BANK = 256
         const val MOE_SLOT_BANK_STEP = 8
 
         // Anything this large is "no practical cap"; the context window and the

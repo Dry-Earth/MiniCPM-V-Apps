@@ -426,7 +426,7 @@ class MainActivity : AppCompatActivity() {
                     topK = settings.topK,
                     topP = settings.topP,
                     nUbatch = settings.nUbatch,
-                    moeSlotBank = settings.moeSlotBank,
+                    moeSlotBank = settings.effectiveMoeSlotBank(model.isMoe),
                 )
                 // An empty prompt means "inject nothing", which is what the
                 // upstream demo does; a non-empty one has to go in right after
