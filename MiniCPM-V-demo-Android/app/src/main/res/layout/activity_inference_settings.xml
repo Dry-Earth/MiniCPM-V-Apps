@@ -344,6 +344,22 @@
                 android:textColor="?android:attr/textColorSecondary"
                 android:textSize="12sp" />
 
+            <com.google.android.material.materialswitch.MaterialSwitch
+                android:id="@+id/switch_vision_gpu"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:text="@string/params_vision_gpu_title"
+                android:textColor="?attr/colorOnSurface"
+                android:textSize="14sp" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/params_vision_gpu_hint"
+                android:textColor="?android:attr/textColorSecondary"
+                android:textSize="12sp" />
+
             <!-- MoE expert slots: only meaningful for les.moe models -->
             <LinearLayout
                 android:id="@+id/layout_moe"

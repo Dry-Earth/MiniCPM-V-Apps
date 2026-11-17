@@ -205,7 +205,8 @@ extern "C"
 JNIEXPORT jint JNICALL
 Java_com_example_minicpm_1v_1demo_LlamaEngine_loadMmproj(JNIEnv *env, jobject,
                                                         jstring jmmproj_path,
-                                                        jint jimage_max_slice_nums) {
+                                                        jint jimage_max_slice_nums,
+                                                        jboolean jallow_gpu) {
     if (!g_model) {
         LOGe("%s: Base model must be loaded first!", __func__);
         return 1;
@@ -215,16 +216,21 @@ Java_com_example_minicpm_1v_1demo_LlamaEngine_loadMmproj(JNIEnv *env, jobject,
     LOGd("%s: Loading mmproj from: \n%s\n", __func__, mmproj_path);
 
     mtmd_context_params mparams = mtmd_context_params_default();
-    bool use_gpu = false;
+    // The vision tower gets its own device choice: an Adreno-backed clip graph
+    // regressed badly on real hardware even when the LLM stayed on CPU, so the
+    // caller decides instead of "any GPU present wins".
+    bool gpu_present = false;
     for (size_t i = 0; i < ggml_backend_dev_count(); ++i) {
         const auto type = ggml_backend_dev_type(ggml_backend_dev_get(i));
         if (type == GGML_BACKEND_DEVICE_TYPE_GPU || type == GGML_BACKEND_DEVICE_TYPE_IGPU) {
-            use_gpu = true;
+            gpu_present = true;
         }
     }
+    const bool use_gpu = gpu_present && (jallow_gpu == JNI_TRUE);
     mparams.use_gpu = use_gpu;
     mparams.print_timings = false;
-    LOGi("%s: vision use_gpu=%d, llm graph stays on CPU", __func__, (int) use_gpu);
+    LOGi("%s: vision use_gpu=%d (gpu_present=%d, requested=%d)",
+         __func__, (int) use_gpu, (int) gpu_present, (int) (jallow_gpu == JNI_TRUE));
 
     g_image_max_slice_nums       = (jint) jimage_max_slice_nums;
     mparams.image_max_slice_nums = g_image_max_slice_nums;
@@ -623,6 +629,11 @@ Java_com_example_minicpm_1v_1demo_LlamaEngine_prefillImage(
         return 4;
     }
 
+    const int64_t t0 = ggml_time_ms();
+    LOGi("%s: chunks=%d start_pos=%d slice_cap=%d", __func__,
+         (int) mtmd_input_chunks_size(chunks), (int) current_position,
+         g_image_max_slice_nums);
+
     llama_pos new_n_past;
     if (mtmd_helper_eval_chunks(g_ctx_vision, g_context, chunks,
                                 current_position, 0, BATCH_SIZE,
@@ -637,7 +648,8 @@ Java_com_example_minicpm_1v_1demo_LlamaEngine_prefillImage(
     g_image_prefilled = true;
     g_vision_mode = true;
 
-    LOGi("%s: Image prefilled, current_position: %d", __func__, current_position);
+    LOGi("%s: Image prefilled, current_position=%d, took %lld ms", __func__,
+         (int) current_position, (long long) (ggml_time_ms() - t0));
     return 0;
 }
 

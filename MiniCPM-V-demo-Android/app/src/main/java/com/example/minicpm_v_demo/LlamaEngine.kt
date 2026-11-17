@@ -1018,7 +1018,7 @@ class LlamaEngine private constructor(
     private external fun loadWithMoe(modelPath: String, moeSlotBank: Int, gpuLayers: Int): Int
     // image_max_slice_nums: 1..9 (or -1 for model default).  See JNI for
     // the semantics; the upper layer should pass MIN_IMAGE_SLICE..MAX_IMAGE_SLICE.
-    private external fun loadMmproj(mmprojPath: String, imageMaxSliceNums: Int): Int
+    private external fun loadMmproj(mmprojPath: String, imageMaxSliceNums: Int, allowGpu: Boolean): Int
     // Native counterpart of [setImageMaxSliceNums].  Renamed in JNI as
     // setImageMaxSliceNumsNative to avoid the name collision with the
     // public suspend wrapper above.
@@ -1092,6 +1092,7 @@ class LlamaEngine private constructor(
         nUbatch: Int = 0,
         moeSlotBank: Int = 0,
         gpuLayers: Int = 0,
+        visionUseGpu: Boolean = false,
     ) =
         withContext(llamaDispatcher) {
             check(_state.value is LlamaState.Initialized) {
@@ -1123,7 +1124,7 @@ class LlamaEngine private constructor(
 
                     val sliceCap = imageMaxSliceNums ?: getImageMaxSliceNums(context)
                     Log.i(TAG, "Loading mmproj (image_max_slice_nums=$sliceCap)... \n$pathToMmproj")
-                    loadMmproj(pathToMmproj, sliceCap).let {
+                    loadMmproj(pathToMmproj, sliceCap, visionUseGpu).let {
                         if (it != 0) {
                             Log.w(TAG, "Failed to load mmproj (code: $it), continuing without vision support")
                         } else {

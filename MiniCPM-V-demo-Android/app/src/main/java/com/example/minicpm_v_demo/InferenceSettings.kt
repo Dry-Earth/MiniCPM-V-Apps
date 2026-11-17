@@ -33,6 +33,12 @@ data class InferenceSettings(
      * GGML_VULKAN; otherwise llama.cpp logs "no usable GPU" and stays on CPU.
      */
     val gpuLayers: Int = 0,
+    /**
+     * Whether the vision tower (mmproj/clip) may use the GPU. Kept separate from
+     * [gpuLayers] because an Adreno-backed clip graph crashed on device even
+     * while the LLM stayed on CPU, so the two decisions are independent.
+     */
+    val visionUseGpu: Boolean = false,
     /** Empty = no system prompt is injected (upstream behaviour). */
     val systemPrompt: String = "",
 ) {
@@ -90,6 +96,7 @@ data class InferenceSettings(
         private const val KEY_MOE_SLOT_BANK = "moe_slot_bank"
         private const val KEY_THINKING = "enable_thinking"
         private const val KEY_GPU_LAYERS = "gpu_layers"
+        private const val KEY_VISION_GPU = "vision_use_gpu"
         private const val KEY_SYSTEM_PROMPT = "system_prompt"
 
         fun load(context: Context): InferenceSettings {
@@ -109,6 +116,7 @@ data class InferenceSettings(
                     .coerceIn(0, MAX_MOE_SLOT_BANK),
                 enableThinking = p.getBoolean(KEY_THINKING, d.enableThinking),
                 gpuLayers = p.getInt(KEY_GPU_LAYERS, d.gpuLayers).coerceIn(0, MAX_GPU_LAYERS),
+                visionUseGpu = p.getBoolean(KEY_VISION_GPU, d.visionUseGpu),
                 systemPrompt = p.getString(KEY_SYSTEM_PROMPT, d.systemPrompt) ?: "",
             )
         }
@@ -125,6 +133,7 @@ data class InferenceSettings(
                 .putInt(KEY_MOE_SLOT_BANK, settings.moeSlotBank)
                 .putBoolean(KEY_THINKING, settings.enableThinking)
                 .putInt(KEY_GPU_LAYERS, settings.gpuLayers)
+                .putBoolean(KEY_VISION_GPU, settings.visionUseGpu)
                 .putString(KEY_SYSTEM_PROMPT, settings.systemPrompt)
                 .apply()
         }

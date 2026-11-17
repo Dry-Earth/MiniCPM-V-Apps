@@ -428,6 +428,7 @@ class MainActivity : AppCompatActivity() {
                     nUbatch = settings.nUbatch,
                     moeSlotBank = settings.effectiveMoeSlotBank(model.isMoe),
                     gpuLayers = settings.gpuLayers,
+                    visionUseGpu = settings.visionUseGpu,
                 )
                 // An empty prompt means "inject nothing", which is what the
                 // upstream demo does; a non-empty one has to go in right after

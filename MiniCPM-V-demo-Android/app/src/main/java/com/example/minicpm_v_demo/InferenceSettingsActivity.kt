@@ -34,6 +34,7 @@ class InferenceSettingsActivity : AppCompatActivity() {
     private lateinit var sliderMoe: Slider
     private lateinit var sliderGpu: Slider
     private lateinit var switchThinking: MaterialSwitch
+    private lateinit var switchVisionGpu: MaterialSwitch
     private lateinit var etSystemPrompt: EditText
     private lateinit var layoutMoe: View
 
@@ -63,6 +64,7 @@ class InferenceSettingsActivity : AppCompatActivity() {
         sliderMoe = findViewById(R.id.slider_moe)
         sliderGpu = findViewById(R.id.slider_gpu)
         switchThinking = findViewById(R.id.switch_thinking)
+        switchVisionGpu = findViewById(R.id.switch_vision_gpu)
         etSystemPrompt = findViewById(R.id.et_system_prompt)
         layoutMoe = findViewById(R.id.layout_moe)
 
@@ -98,6 +100,7 @@ class InferenceSettingsActivity : AppCompatActivity() {
         sliderMoe.setSafe(settings.moeSlotBank.toFloat())
         sliderGpu.setSafe(settings.gpuLayers.toFloat())
         switchThinking.isChecked = settings.enableThinking
+        switchVisionGpu.isChecked = settings.visionUseGpu
         etSystemPrompt.setText(settings.systemPrompt)
         refreshLabels()
     }
@@ -126,6 +129,11 @@ class InferenceSettingsActivity : AppCompatActivity() {
             settings = settings.copy(enableThinking = checked)
             // Keep the home screen's think button and the native flag in sync.
             LlamaEngine.setEnableThinkingPref(this, checked)
+            InferenceSettings.save(this, settings)
+        }
+
+        switchVisionGpu.setOnCheckedChangeListener { _, checked ->
+            settings = settings.copy(visionUseGpu = checked)
             InferenceSettings.save(this, settings)
         }
 
