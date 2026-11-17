@@ -146,6 +146,16 @@ jobs:
           echo "patched call sites: $N"
           test "$N" -eq 3
 
+          # This fork's vulkan-shaders-gen never emits cooperative-matrix ("_cm1")
+          # variants for the iq3_s / iq4_nl / iq4_xs / mxfp4 / nvfp4 matmul_id
+          # shaders, but the dispatch code references them unconditionally, so
+          # the link fails with 18 undefined symbols. Disable the coopmat paths
+          # (plain compute shaders still run on the GPU) rather than patch the
+          # generator.
+          sed -i 's|^#if defined(VK_KHR_cooperative_matrix) && defined(GGML_VULKAN_COOPMAT_GLSLC_SUPPORT)$|#if 0 /* coopmat disabled: no cm1 shaders for these quants in this fork */|' "$F"
+          sed -i 's|^#if defined(GGML_VULKAN_COOPMAT_GLSLC_SUPPORT)$|#if 0 /* coopmat disabled */|' "$F"
+          test "$(grep -c '^#if 0 /\* coopmat' "$F")" -eq 9
+
       - name: Prepare signing key
         id: keystore
         env:
