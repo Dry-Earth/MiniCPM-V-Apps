@@ -72,6 +72,22 @@ static int                                g_minicpmv_version = 0;
 // setImageMaxSliceNumsNative call before mmproj is loaded.
 static int                                g_image_max_slice_nums = 9;
 
+// Vision-graph progress counter. mtmd evaluates the clip graph node by node;
+// logging every 64th node turns an opaque "spinner forever" report into either
+// "it is making progress" or "it stopped at node N".
+static int64_t                            g_vision_nodes = 0;
+static bool vision_eval_progress(struct ggml_tensor * t, bool ask, void * /*user_data*/) {
+    if (!ask) {
+        return true;
+    }
+    ++g_vision_nodes;
+    if (g_vision_nodes % 64 == 0) {
+        LOGi("vision graph: node %lld (%s)", (long long) g_vision_nodes,
+             t && t->name[0] ? t->name : "?");
+    }
+    return true;
+}
+
 // Effective n_ctx used to create g_context.  Set by prepare(); reads by
 // the few stay-under-context guards scattered through this file.  Kept
 // as a global rather than a llama_n_ctx() call so we don't depend on
@@ -229,6 +245,8 @@ Java_com_example_minicpm_1v_1demo_LlamaEngine_loadMmproj(JNIEnv *env, jobject,
     const bool use_gpu = gpu_present && (jallow_gpu == JNI_TRUE);
     mparams.use_gpu = use_gpu;
     mparams.print_timings = false;
+    mparams.cb_eval = vision_eval_progress;
+    mparams.cb_eval_user_data = nullptr;
     LOGi("%s: vision use_gpu=%d (gpu_present=%d, requested=%d)",
          __func__, (int) use_gpu, (int) gpu_present, (int) (jallow_gpu == JNI_TRUE));
 
@@ -630,6 +648,7 @@ Java_com_example_minicpm_1v_1demo_LlamaEngine_prefillImage(
     }
 
     const int64_t t0 = ggml_time_ms();
+    g_vision_nodes = 0;
     LOGi("%s: chunks=%d start_pos=%d slice_cap=%d", __func__,
          (int) mtmd_input_chunks_size(chunks), (int) current_position,
          g_image_max_slice_nums);
@@ -648,8 +667,9 @@ Java_com_example_minicpm_1v_1demo_LlamaEngine_prefillImage(
     g_image_prefilled = true;
     g_vision_mode = true;
 
-    LOGi("%s: Image prefilled, current_position=%d, took %lld ms", __func__,
-         (int) current_position, (long long) (ggml_time_ms() - t0));
+    LOGi("%s: Image prefilled, current_position=%d, nodes=%lld, took %lld ms", __func__,
+         (int) current_position, (long long) g_vision_nodes,
+         (long long) (ggml_time_ms() - t0));
     return 0;
 }
 
