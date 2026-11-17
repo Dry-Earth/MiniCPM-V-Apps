@@ -54,6 +54,7 @@ android {
 
                 if (vulkanEnabled) {
                     arguments += "-DGGML_VULKAN=ON"
+                    arguments += "-DMINICPMV_VULKAN_BUILD=ON"
                     System.getenv("MINICPMV_GLSLC")?.let { arguments += "-DVulkan_GLSLC_EXECUTABLE=$it" }
                     System.getenv("MINICPMV_VULKAN_INCLUDE")?.let { arguments += "-DVulkan_INCLUDE_DIR=$it" }
                     System.getenv("MINICPMV_VULKAN_LIBRARY")?.let { arguments += "-DVulkan_LIBRARY=$it" }

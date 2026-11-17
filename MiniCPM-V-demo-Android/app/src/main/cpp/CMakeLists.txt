@@ -46,6 +46,10 @@ if(NOT EXISTS ${LLAMA_SRC}/CMakeLists.txt)
 endif()
 message(STATUS "Using llama.cpp-omni source at: ${LLAMA_SRC}")
 
+if(DEFINED MINICPMV_VULKAN_BUILD AND MINICPMV_VULKAN_BUILD)
+    message(STATUS "Vulkan build: enabling the 1.1 entry point shim")
+endif()
+
 # GPU acceleration is off: the vision tower runs on the Hexagon NPU when it can
 # and on the CPU otherwise, so Vulkan would only add a third path and 41 MB of
 # vendored headers nobody can rebuild from this tree.
@@ -72,9 +76,13 @@ endif()
 add_library(${CMAKE_PROJECT_NAME} SHARED
         llama_jni.cpp
         omni_jni.cpp
+        vulkan_api_shim.c
         ${MINICPM_QNN_SOURCES})
 
+# Only compiled into Vulkan builds: it exists to satisfy a link-time reference
+# from ggml-vulkan that the Android stub library cannot.
 target_compile_definitions(${CMAKE_PROJECT_NAME} PRIVATE
+        MINICPMV_VULKAN_SHIM=$<BOOL:${MINICPMV_VULKAN_BUILD}>
         GGML_SYSTEM_ARCH=${GGML_SYSTEM_ARCH}
         GGML_CPU_KLEIDIAI=$<BOOL:${GGML_CPU_KLEIDIAI}>
         GGML_OPENMP=$<BOOL:${GGML_OPENMP}>
