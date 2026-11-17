@@ -74,6 +74,13 @@
             android:parentActivityName=".MainActivity"
             android:windowSoftInputMode="adjustResize" />
         <activity
+            android:name=".InferenceSettingsActivity"
+            android:exported="false"
+            android:configChanges="locale|layoutDirection"
+            android:label="@string/params_title"
+            android:parentActivityName=".MainActivity"
+            android:windowSoftInputMode="adjustResize" />
+        <activity
             android:name=".TtsActivity"
             android:exported="false"
             android:configChanges="locale|layoutDirection"

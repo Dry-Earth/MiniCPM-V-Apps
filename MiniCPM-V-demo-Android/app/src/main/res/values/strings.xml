@@ -200,4 +200,47 @@
     <string name="ocr_status_block">第 %1$d / %2$d 页 · %3$s</string>
     <string name="ocr_status_done">识别完成</string>
     <string name="ocr_status_cancel">已取消</string>
+
+    <!-- 推理参数 -->
+    <string name="params_title">推理参数</string>
+    <string name="params_auto">自动</string>
+    <string name="params_unlimited">不限制</string>
+    <string name="params_reset">恢复默认</string>
+    <string name="params_reset_done">已恢复默认参数</string>
+    <string name="params_note">上下文长度、批大小、MoE 槽位在模型加载时生效，修改后会自动重新加载；温度、Top-K、Top-P 与输出长度从下一轮对话开始生效。</string>
+    <string name="params_ctx_title">上下文长度</string>
+    <string name="params_ctx_hint">越大越能记住长对话，占用内存也越多</string>
+    <string name="params_max_tokens_title">单轮输出上限</string>
+    <string name="params_max_tokens_hint">一次回答最多生成多少 token</string>
+    <string name="params_temp_title">温度</string>
+    <string name="params_temp_hint">越低越稳定，越高越发散</string>
+    <string name="params_topk_title">Top-K</string>
+    <string name="params_topk_hint">0 表示关闭该过滤</string>
+    <string name="params_topp_title">Top-P</string>
+    <string name="params_topp_hint">1.0 表示关闭该过滤</string>
+    <string name="params_ubatch_title">批大小 n_ubatch</string>
+    <string name="params_ubatch_hint">预填充阶段每批 token 数，越大越快也越吃内存</string>
+    <string name="params_slice_title">图片切片数</string>
+    <string name="params_slice_hint">1 最快，9 最清晰</string>
+    <string name="params_moe_title">MoE 专家槽位</string>
+    <string name="params_moe_hint">仅 35B-A3B 这类专家模型需要，槽位越多越快也越占内存</string>
+    <string name="params_thinking_title">思考模式</string>
+    <string name="params_thinking_hint">先输出 think 过程再回答，支持该模式的模型才有区别</string>
+    <string name="params_system_prompt_title">系统提示词</string>
+    <string name="params_system_prompt_hint">留空则不注入任何系统提示词（默认行为）</string>
+    <string name="toast_settings_applied">参数已更新，正在重新加载模型</string>
+
+    <!-- 本地模型导入 -->
+    <string name="import_local_model">导入本地模型</string>
+    <string name="import_pick_model">选择 GGUF 模型文件</string>
+    <string name="import_pick_mmproj">选择对应的 mmproj 视觉投影文件；纯文本模型可直接跳过</string>
+    <string name="import_skip">跳过</string>
+    <string name="import_in_progress">正在复制 %1$s</string>
+    <string name="import_done">已导入：%1$s</string>
+    <string name="import_failed">导入失败：%1$s</string>
+    <string name="import_need_gguf">请选择 .gguf 文件</string>
+    <string name="custom_model_desc">本地导入 · %1$s</string>
+    <string name="toast_custom_no_download">本地导入的模型没有下载源，删除后需重新导入</string>
+    <string name="model_desc_v47_1b">V4.7 轻量多模态模型，qwen35 文本塔 (1B)</string>
+    <string name="model_desc_v47_35b">V4.7 稀疏专家多模态模型，35B 参数 / 3B 激活</string>
 </resources>

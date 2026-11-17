@@ -45,6 +45,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var btnClearChat: ImageButton
     private lateinit var btnModelManager: ImageButton
     private lateinit var btnImageSlice: ImageButton
+    private lateinit var btnInferenceSettings: ImageButton
     private lateinit var cardInputBar: View
     private lateinit var appBarLayout: AppBarLayout
     private lateinit var tvTitle: TextView
@@ -56,6 +57,8 @@ class MainActivity : AppCompatActivity() {
     private var isProcessingVideo = false
     private var hasAutoLoaded = false
     private var loadedModelId: String? = null
+    /** Snapshot taken before opening the settings screen, to detect changes. */
+    private var settingsAtLastLoad: InferenceSettings? = null
     private var messageIdCounter = 1L
     private val messages = mutableListOf<ChatMessage>()
     private var createdWithLocale: String? = null
@@ -121,6 +124,7 @@ class MainActivity : AppCompatActivity() {
         btnClearChat = findViewById(R.id.btn_clear_chat)
         btnModelManager = findViewById(R.id.btn_model_manager)
         btnImageSlice = findViewById(R.id.btn_image_slice)
+        btnInferenceSettings = findViewById(R.id.btn_inference_settings)
         cardInputBar = findViewById(R.id.card_input_bar)
         appBarLayout = findViewById(R.id.appBarLayout)
         tvTitle = findViewById(R.id.tv_title)
@@ -178,6 +182,12 @@ class MainActivity : AppCompatActivity() {
             startActivity(Intent(this, ModelManagerActivity::class.java))
         }
         btnImageSlice.setOnClickListener { showImageSliceDialog() }
+        btnInferenceSettings.setOnClickListener {
+            settingsAtLastLoad = InferenceSettings.load(this)
+            openInferenceSettings.launch(
+                Intent(this, InferenceSettingsActivity::class.java)
+            )
+        }
 
         etInput.setOnFocusChangeListener { _, hasFocus ->
             if (hasFocus) {
@@ -405,8 +415,25 @@ class MainActivity : AppCompatActivity() {
 
         lifecycleScope.launch(Dispatchers.IO) {
             try {
+                val settings = InferenceSettings.load(this@MainActivity)
                 val mmprojArg = if (mmprojFile != null && mmprojFile.exists()) mmprojFile.absolutePath else null
-                engine.loadModel(ggufFile.absolutePath, mmprojArg)
+                engine.loadModel(
+                    pathToModel = ggufFile.absolutePath,
+                    pathToMmproj = mmprojArg,
+                    imageMaxSliceNums = settings.imageMaxSlice,
+                    nCtx = settings.nCtx,
+                    temperature = settings.temperature,
+                    topK = settings.topK,
+                    topP = settings.topP,
+                    nUbatch = settings.nUbatch,
+                    moeSlotBank = settings.moeSlotBank,
+                )
+                // An empty prompt means "inject nothing", which is what the
+                // upstream demo does; a non-empty one has to go in right after
+                // the load, before the first user turn.
+                if (settings.systemPrompt.isNotBlank()) {
+                    engine.setSystemPrompt(settings.systemPrompt)
+                }
                 loadedModelId = model.id
             } catch (e: Exception) {
                 Log.e(TAG, "Error loading model", e)
@@ -449,6 +476,24 @@ class MainActivity : AppCompatActivity() {
         ActivityResultContracts.OpenDocument()
     ) { uri ->
         uri?.let { handleSelectedMedia(it) }
+    }
+
+    // Context length / MoE slot bank / batch size are baked into the llama
+    // context at load time, so a change there needs a reload. Sampling knobs
+    // (temperature, top-k, top-p) and the token budget take effect on the next
+    // turn without one, but we reload anyway to keep the behaviour obvious.
+    private val openInferenceSettings = registerForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) {
+        val now = InferenceSettings.load(this)
+        val before = settingsAtLastLoad
+        if (before != null && now != before) {
+            settingsAtLastLoad = now
+            if (engine.state.value is LlamaState.ModelReady) {
+                Toast.makeText(this, R.string.toast_settings_applied, Toast.LENGTH_SHORT).show()
+                reloadAfterModelSwitch()
+            }
+        }
     }
 
     private fun handleSelectedMedia(uri: Uri) {
@@ -662,7 +707,7 @@ class MainActivity : AppCompatActivity() {
 
         generationJob = lifecycleScope.launch(Dispatchers.Default) {
             val fullResponse = StringBuilder()
-            engine.sendUserPrompt(userMsg)
+            engine.sendUserPrompt(userMsg, InferenceSettings.load(this@MainActivity).effectiveMaxTokens())
                 .onCompletion {
                     withContext(Dispatchers.Main) {
                         val index = messages.indexOfFirst { it.id == aiMsgId }

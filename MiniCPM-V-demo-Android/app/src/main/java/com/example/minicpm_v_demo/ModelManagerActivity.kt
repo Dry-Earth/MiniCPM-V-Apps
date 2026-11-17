@@ -34,6 +34,10 @@ class ModelManagerActivity : AppCompatActivity() {
     private lateinit var progressDownload: LinearProgressIndicator
     private lateinit var recyclerModels: RecyclerView
     private lateinit var tvLanguageValue: TextView
+    private lateinit var btnImportModel: MaterialButton
+
+    /** GGUF picked in the first step of the import flow, waiting for mmproj. */
+    private var pendingGgufUri: android.net.Uri? = null
 
     private lateinit var engine: LlamaEngine
     private lateinit var modelAdapter: ModelAdapter
@@ -70,6 +74,7 @@ class ModelManagerActivity : AppCompatActivity() {
         progressDownload = findViewById(R.id.progress_download)
         recyclerModels = findViewById(R.id.recycler_models)
         tvLanguageValue = findViewById(R.id.tv_language_value)
+        btnImportModel = findViewById(R.id.btn_import_model)
 
         engine = LlamaEngine.getInstance(applicationContext)
 
@@ -83,12 +88,13 @@ class ModelManagerActivity : AppCompatActivity() {
         btnLoadModel.setOnClickListener { loadSelectedModel() }
         btnDeleteModel.setOnClickListener { confirmDeleteModel() }
         findViewById<View>(R.id.btn_language).setOnClickListener { showLanguagePicker() }
+        btnImportModel.setOnClickListener { pickGguf.launch(arrayOf("*/*")) }
     }
 
     private fun setupModelList() {
         val selectedModel = LlamaEngine.getSelectedModel(this)
         modelAdapter = ModelAdapter(
-            models = ModelInfo.AVAILABLE_MODELS,
+            models = CustomModelStore.all(this),
             selectedModelId = selectedModel.id,
             onModelSelected = { model ->
                 val previousModelId = LlamaEngine.getSelectedModel(this).id
@@ -130,9 +136,23 @@ class ModelManagerActivity : AppCompatActivity() {
         lifecycleScope.launch(Dispatchers.IO) {
             try {
                 engine.unloadModel()
+                val settings = InferenceSettings.load(applicationContext)
                 val mmprojPath = LlamaEngine.mmprojPath(applicationContext)
                 val mmprojArg = mmprojPath?.let { if (File(it).exists()) it else null }
-                engine.loadModel(modelPath, mmprojArg)
+                engine.loadModel(
+                    pathToModel = modelPath,
+                    pathToMmproj = mmprojArg,
+                    imageMaxSliceNums = settings.imageMaxSlice,
+                    nCtx = settings.nCtx,
+                    temperature = settings.temperature,
+                    topK = settings.topK,
+                    topP = settings.topP,
+                    nUbatch = settings.nUbatch,
+                    moeSlotBank = settings.moeSlotBank,
+                )
+                if (settings.systemPrompt.isNotBlank()) {
+                    engine.setSystemPrompt(settings.systemPrompt)
+                }
                 LlamaEngine.markModelSwitched(applicationContext)
                 withContext(Dispatchers.Main) {
                     updateLoadButtonState()
@@ -210,6 +230,10 @@ class ModelManagerActivity : AppCompatActivity() {
     }
 
     private fun onDownloadClicked() {
+        if (LlamaEngine.getSelectedModel(this).isCustom) {
+            Toast.makeText(this, R.string.toast_custom_no_download, Toast.LENGTH_LONG).show()
+            return
+        }
         if (ModelDownloadController.isRunning) {
             Toast.makeText(this, R.string.toast_downloading, Toast.LENGTH_SHORT).show()
             return
@@ -339,9 +363,23 @@ class ModelManagerActivity : AppCompatActivity() {
                 val mmprojArg = mmprojPath?.let { path ->
                     if (File(path).exists()) path else null
                 }
-                engine.loadModel(modelPath, mmprojArg)
-                // No default system prompt: aligned with iOS opt-r1. See
-                // MainActivity.clearChat() for the rationale.
+                val settings = InferenceSettings.load(applicationContext)
+                engine.loadModel(
+                    pathToModel = modelPath,
+                    pathToMmproj = mmprojArg,
+                    imageMaxSliceNums = settings.imageMaxSlice,
+                    nCtx = settings.nCtx,
+                    temperature = settings.temperature,
+                    topK = settings.topK,
+                    topP = settings.topP,
+                    nUbatch = settings.nUbatch,
+                    moeSlotBank = settings.moeSlotBank,
+                )
+                // Empty by default (no system prompt), matching upstream; a
+                // non-empty one must be injected before the first user turn.
+                if (settings.systemPrompt.isNotBlank()) {
+                    engine.setSystemPrompt(settings.systemPrompt)
+                }
 
                 withContext(Dispatchers.Main) {
                     btnLoadModel.isEnabled = true
@@ -392,6 +430,11 @@ class ModelManagerActivity : AppCompatActivity() {
                 // Also delete the acoustic GGUF for TTS models
                 val acousticPath = LlamaEngine.acousticPath(applicationContext)
                 acousticPath?.let { File(it) }?.let { if (it.exists()) { it.delete(); deleted = true } }
+                // Imported models also have a registry entry to drop, otherwise
+                // the list keeps a row that points at deleted files.
+                if (LlamaEngine.getSelectedModel(applicationContext).isCustom) {
+                    CustomModelStore.remove(applicationContext, LlamaEngine.getSelectedModel(applicationContext).id)
+                }
 
                 withContext(Dispatchers.Main) {
                     updateLoadButtonState()
@@ -432,6 +475,97 @@ class ModelManagerActivity : AppCompatActivity() {
             }
             .setNegativeButton(R.string.cancel, null)
             .show()
+    }
+
+    // ------------------------------------------------------------------
+    // Local model import
+    //
+    // Two-step SAF flow: the GGUF first, then an optional mmproj. SAF cannot
+    // hand out a directory, and a GGUF can be many GB, so the file is streamed
+    // straight into files/models/<id>/ instead of being buffered.
+    // ------------------------------------------------------------------
+
+    private val pickGguf = registerForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        if (uri == null) return@registerForActivityResult
+        val name = displayNameOf(uri)
+        if (name == null || !name.lowercase().endsWith(".gguf")) {
+            Toast.makeText(this, R.string.import_need_gguf, Toast.LENGTH_LONG).show()
+            return@registerForActivityResult
+        }
+        pendingGgufUri = uri
+        AlertDialog.Builder(this)
+            .setMessage(R.string.import_pick_mmproj)
+            .setPositiveButton(R.string.import_local_model) { _, _ ->
+                pickMmproj.launch(arrayOf("*/*"))
+            }
+            .setNeutralButton(R.string.import_skip) { _, _ -> startImport(null) }
+            .setNegativeButton(R.string.cancel, null)
+            .show()
+    }
+
+    private val pickMmproj = registerForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        if (uri == null) {
+            startImport(null)
+        } else {
+            startImport(uri)
+        }
+    }
+
+    private fun displayNameOf(uri: android.net.Uri): String? =
+        contentResolver.query(
+            uri,
+            arrayOf(android.provider.OpenableColumns.DISPLAY_NAME),
+            null, null, null
+        )?.use { c -> if (c.moveToFirst()) c.getString(0) else null }
+
+    private fun startImport(mmprojUri: android.net.Uri?) {
+        val gguf = pendingGgufUri ?: return
+        pendingGgufUri = null
+
+        btnImportModel.isEnabled = false
+        tvModelStatus.text = getString(R.string.import_in_progress, displayNameOf(gguf) ?: "")
+
+        lifecycleScope.launch(Dispatchers.IO) {
+            try {
+                val model = CustomModelStore.import(
+                    context = applicationContext,
+                    ggufUri = gguf,
+                    mmprojUri = mmprojUri,
+                    displayName = null,
+                    onProgress = { name ->
+                        runOnUiThread {
+                            tvModelStatus.text = getString(R.string.import_in_progress, name)
+                        }
+                    },
+                )
+                LlamaEngine.setSelectedModel(applicationContext, model.id)
+                withContext(Dispatchers.Main) {
+                    btnImportModel.isEnabled = true
+                    setupModelList()
+                    updateLoadButtonState()
+                    Toast.makeText(
+                        this@ModelManagerActivity,
+                        getString(R.string.import_done, model.displayName),
+                        Toast.LENGTH_SHORT
+                    ).show()
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "import failed", e)
+                withContext(Dispatchers.Main) {
+                    btnImportModel.isEnabled = true
+                    tvModelStatus.text = getString(R.string.import_failed, e.message)
+                    Toast.makeText(
+                        this@ModelManagerActivity,
+                        getString(R.string.import_failed, e.message),
+                        Toast.LENGTH_LONG
+                    ).show()
+                }
+            }
+        }
     }
 
     companion object {

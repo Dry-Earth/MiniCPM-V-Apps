@@ -1,0 +1,147 @@
+name: android
+
+# Builds the arm64-v8a APK on a plain ubuntu runner.
+#
+# Two things make a clean checkout buildable here that are not obvious:
+#   1. the llama.cpp-omni submodule must be fetched (CMake fails without it), and
+#   2. the QAIRT headers are not in the repo, so the native build falls back to
+#      the QNN stub unless `ENABLE_QNN` is set (see the NPU step below).
+
+on:
+  workflow_dispatch:
+    inputs:
+      enable_qnn:
+        description: "Also package the Hexagon NPU runtime (downloads QAIRT)"
+        type: boolean
+        default: false
+  push:
+    branches: [ main, "feat/**" ]
+    paths-ignore:
+      - "**.md"
+
+concurrency:
+  group: android-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 150
+    env:
+      ANDROID_NDK_VERSION: "27.0.12077973"
+      CMAKE_VERSION: "4.1.2"
+      QAIRT_VERSION: "2.52.1.261105"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 1
+
+      # The runner image ships ~14 GB free; NDK + SDK + a full llama.cpp build
+      # does not fit alongside all the preinstalled toolchains.
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android/sdk/ndk \
+            /opt/ghc /opt/hostedtoolcache/CodeQL /usr/local/share/boost
+          df -h /
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: ""
+
+      - name: Install SDK packages
+        run: |
+          yes | sdkmanager --licenses > /dev/null || true
+          sdkmanager --install \
+            "platform-tools" \
+            "platforms;android-36" \
+            "build-tools;36.0.0" \
+            "ndk;27.0.12077973" \
+            "cmake;4.1.2"
+          # compileSdk 36.1 needs the minor-level platform on some AGP builds;
+          # installing it is harmless when it does not exist.
+          sdkmanager --install "platforms;android-36.1" || true
+          echo "ANDROID_HOME=$ANDROID_HOME" >> "$GITHUB_ENV"
+
+      # Optional: the crate-NPU path needs QAIRT 2.5x headers + libs. Without
+      # them CMakeLists.txt compiles qnn_vit_stub.cpp and OCR stays on CPU.
+      - name: Package Hexagon NPU runtime
+        if: ${{ inputs.enable_qnn || vars.ENABLE_QNN == 'true' }}
+        run: |
+          set -euo pipefail
+          URL="https://softwarecenter.qualcomm.com/api/download/software/sdks/Qualcomm_AI_Runtime_Community/All/${QAIRT_VERSION}/v${QAIRT_VERSION}.zip"
+          # NOTE: use GET, not HEAD - the CDN answers 403 to HEAD.
+          curl -fL --retry 5 --retry-all-errors -o /tmp/qairt.zip "$URL"
+          mkdir -p /tmp/qairt && unzip -q /tmp/qairt.zip -d /tmp/qairt
+          QROOT=$(find /tmp/qairt -maxdepth 3 -name QnnSdkBuildId.h -printf '%h\n' | head -1)/../..
+          QROOT=$(cd "$QROOT" && pwd)
+          echo "QAIRT root: $QROOT"
+          APP=MiniCPM-V-demo-Android/app/src/main
+          mkdir -p "$APP/jniLibs/arm64-v8a" "$APP/assets/qnn" "$APP/cpp/qnn-include"
+          cp "$QROOT"/lib/aarch64-android/libQnnHtp.so \
+             "$QROOT"/lib/aarch64-android/libQnnSystem.so \
+             "$QROOT"/lib/aarch64-android/libQnnHtpV79Stub.so \
+             "$APP/jniLibs/arm64-v8a/"
+          cp "$QROOT"/lib/hexagon-v79/unsigned/libQnnHtpV79Skel.so "$APP/assets/qnn/"
+          cp -r "$QROOT"/include/QNN "$APP/cpp/qnn-include/"
+
+      - name: Prepare signing key
+        id: keystore
+        env:
+          KEYSTORE_B64: ${{ secrets.KEYSTORE_B64 }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/sign"
+          if [ -n "${KEYSTORE_B64:-}" ]; then
+            echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/sign/release.jks"
+            echo "ephemeral=false" >> "$GITHUB_OUTPUT"
+          else
+            keytool -genkeypair -v -keystore "$RUNNER_TEMP/sign/release.jks" \
+              -alias minicpmv -keyalg RSA -keysize 2048 -validity 10000 \
+              -storepass minicpmv -keypass minicpmv \
+              -dname "CN=MiniCPM-V Demo, OU=ci, O=local, L=-, S=-, C=CN"
+            echo "ephemeral=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Build release APK
+        working-directory: MiniCPM-V-demo-Android
+        run: |
+          ./gradlew :app:assembleRelease --no-daemon --stacktrace \
+            -PMINICPMV_KEYSTORE="$RUNNER_TEMP/sign/release.jks" \
+            -PMINICPMV_KEYSTORE_PASSWORD=minicpmv \
+            -PMINICPMV_KEY_ALIAS=minicpmv \
+            -PMINICPMV_KEY_PASSWORD=minicpmv
+
+      - name: Verify and rename
+        run: |
+          set -euo pipefail
+          APK=$(find MiniCPM-V-demo-Android/app/build/outputs/apk/release -name '*.apk' | head -1)
+          echo "APK=$APK"
+          "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify -v "$APK"
+          "$ANDROID_HOME/build-tools/36.0.0/aapt" dump badging "$APK" | grep '^package' || true
+          VERSION=$(grep -oP 'versionName = "\K[^"]+' MiniCPM-V-demo-Android/app/build.gradle.kts)
+          mkdir -p dist
+          cp "$APK" "dist/MiniCPM-V-demo-Android-v${VERSION}.apk"
+          ls -lh dist
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: apk
+          path: dist/*.apk
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo "### Android build"
+            echo "- QNN packaged: ${{ inputs.enable_qnn || vars.ENABLE_QNN == 'true' }}"
+            echo "- Ephemeral signing key: ${{ steps.keystore.outputs.ephemeral }}"
+            echo "  (set the KEYSTORE_B64 secret to keep the same signing identity across runs)"
+          } >> "$GITHUB_STEP_SUMMARY"
