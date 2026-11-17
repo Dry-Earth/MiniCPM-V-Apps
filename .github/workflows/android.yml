@@ -26,6 +26,10 @@ on:
         description: "Vendor the upstream Hexagon NPU backend (V79 skel, prebuilt+signed)"
         type: boolean
         default: false
+      release_tag:
+        description: "Optional: publish the APK to this release tag"
+        type: string
+        default: ""
   push:
     branches: [ main, "feat/**" ]
     paths-ignore:
@@ -299,6 +303,26 @@ jobs:
           path: dist/*.apk
           if-no-files-found: error
           retention-days: 14
+
+      - name: Publish to a release
+        if: ${{ inputs.release_tag != '' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          VERSION=$(grep -oP 'versionName = "\K[^"]+' MiniCPM-V-demo-Android/app/build.gradle.kts)
+          SUFFIX=""
+          [ "${{ inputs.enable_opencl }}" = "true" ] && SUFFIX="${SUFFIX}-opencl"
+          [ "${{ inputs.enable_hexagon }}" = "true" ] && SUFFIX="${SUFFIX}-hexagon"
+          [ "${{ inputs.enable_vulkan }}" = "true" ] && SUFFIX="${SUFFIX}-vulkan"
+          OUT="MiniCPM-V-Demo-Android-v${VERSION}${SUFFIX}.apk"
+          cp "$(find dist -name '*.apk' | head -1)" "/tmp/${OUT}"
+          TAG="${{ inputs.release_tag }}"
+          gh release view "$TAG" >/dev/null 2>&1 || \
+            gh release create "$TAG" --title "v2.7 test builds" --notes "Personal builds: CPU / OpenCL / Hexagon / Vulkan" --prerelease || true
+          gh release upload "$TAG" "/tmp/${OUT}" --clobber
+          echo "### Published" >> "$GITHUB_STEP_SUMMARY"
+          echo "- /tmp/${OUT} -> $TAG" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Summary
         if: always()
