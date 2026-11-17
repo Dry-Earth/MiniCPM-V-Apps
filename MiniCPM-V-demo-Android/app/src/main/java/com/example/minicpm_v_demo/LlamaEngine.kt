@@ -1136,7 +1136,21 @@ class LlamaEngine private constructor(
                             // n_ctx to V46_CONTEXT_SIZE on prepare() and (b) pick the right
                             // assistant-turn prefix.  Mirrors iOS opt-r1, which routes the
                             // same hint through the MBMtmd bridge / MTMDParams.
-                            val mv = inferMinicpmvVersion(getSelectedModel(context))
+                            // Which vision tower is actually on disk? The file is
+                            // called mmproj-model-f16.gguf for several models, so
+                            // only the GGUF metadata tells 4.6 (4x/16x) from 4.7.
+                            val selected = getSelectedModel(context)
+                            val probe = GgufProbe.read(File(pathToMmproj))
+                            Log.i(TAG, "mmproj metadata: projector_type=${probe.projectorType} " +
+                                    "family=${probe.familyVersion} name=${probe.generalName} " +
+                                    "path=$pathToMmproj")
+                            val mv = inferMinicpmvVersion(selected)
+                            Log.i(TAG, "model family=$mv (selected ${selected.id})")
+                            if (probe.familyVersion != 0 && mv != 0 && probe.familyVersion != mv) {
+                                Log.w(TAG, "mmproj family ${probe.familyVersion} != model family $mv " +
+                                        "- the mmproj probably belongs to another model; image " +
+                                        "prefill will produce mismatched tokens")
+                            }
                             setMinicpmvVersionNative(mv)
                             Log.i(TAG, "mmproj loaded successfully! minicpmv_version=$mv")
                         }
