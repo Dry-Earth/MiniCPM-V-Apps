@@ -57,6 +57,10 @@ android {
                     System.getenv("MINICPMV_GLSLC")?.let { arguments += "-DVulkan_GLSLC_EXECUTABLE=$it" }
                     System.getenv("MINICPMV_VULKAN_INCLUDE")?.let { arguments += "-DVulkan_INCLUDE_DIR=$it" }
                     System.getenv("MINICPMV_VULKAN_LIBRARY")?.let { arguments += "-DVulkan_LIBRARY=$it" }
+                    // The Android toolchain sets CMAKE_FIND_ROOT_PATH_MODE_PACKAGE=ONLY, so
+                    // the host's SPIRV-Headers config is invisible unless it is named
+                    // explicitly. ggml-vulkan's CMakeLists requires it.
+                    System.getenv("MINICPMV_SPIRV_DIR")?.let { arguments += "-DSPIRV-Headers_DIR=$it" }
                 }
             }
         }

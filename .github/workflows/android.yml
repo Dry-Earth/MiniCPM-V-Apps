@@ -24,7 +24,7 @@ on:
       - "**.md"
 
 concurrency:
-  group: android-${{ github.ref }}
+  group: android-${{ github.ref }}-${{ inputs.enable_vulkan }}
   cancel-in-progress: true
 
 jobs:
@@ -106,14 +106,17 @@ jobs:
         run: |
           set -euo pipefail
           sudo apt-get update
-          sudo apt-get install -y glslc libvulkan-dev
+          sudo apt-get install -y glslc spirv-headers
           NDK="$ANDROID_HOME/ndk/27.0.12077973"
           SYSROOT="$NDK/toolchains/llvm/prebuilt/linux-x86_64/sysroot"
           echo "MINICPMV_GLSLC=$(command -v glslc)" >> "$GITHUB_ENV"
           echo "MINICPMV_VULKAN_INCLUDE=$SYSROOT/usr/include" >> "$GITHUB_ENV"
           echo "MINICPMV_VULKAN_LIBRARY=$SYSROOT/usr/lib/aarch64-linux-android/24/libvulkan.so" >> "$GITHUB_ENV"
+          SPIRV_DIR=$(dirname "$(dpkg -L spirv-headers | grep 'SPIRV-HeadersConfig.cmake' | head -1)")
+          echo "MINICPMV_SPIRV_DIR=$SPIRV_DIR" >> "$GITHUB_ENV"
           glslc --version | head -2
           ls -l "$SYSROOT/usr/include/vulkan/vulkan.h" "$SYSROOT/usr/lib/aarch64-linux-android/24/libvulkan.so"
+          echo "SPIRV-Headers config: $SPIRV_DIR"
 
       - name: Prepare signing key
         id: keystore
