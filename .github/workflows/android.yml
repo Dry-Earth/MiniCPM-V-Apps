@@ -65,7 +65,11 @@ jobs:
             "cmake;4.1.2"
           # compileSdk 36.1 needs the minor-level platform on some AGP builds;
           # installing it is harmless when it does not exist.
-          sdkmanager --install "platforms;android-36.1" || true
+          sdkmanager --install "platforms;android-36.1" || \
+            sdkmanager --install "platforms;android-36" || true
+          sdkmanager --install "build-tools;36.1.0" || true
+          test -d "$ANDROID_HOME/ndk/27.0.12077973" || { echo "NDK missing"; exit 1; }
+          test -x "$ANDROID_HOME/cmake/4.1.2/bin/cmake" || { echo "cmake 4.1.2 missing"; exit 1; }
           echo "ANDROID_HOME=$ANDROID_HOME" >> "$GITHUB_ENV"
 
       # Optional: the crate-NPU path needs QAIRT 2.5x headers + libs. Without
@@ -108,14 +112,54 @@ jobs:
             echo "ephemeral=true" >> "$GITHUB_OUTPUT"
           fi
 
+      - name: Toolchain diagnostics
+        run: |
+          set +e
+          echo "### Toolchain" >> "$GITHUB_STEP_SUMMARY"
+          {
+            echo '```'
+            java -version 2>&1
+            ls "$ANDROID_HOME/platforms" 2>&1
+            ls "$ANDROID_HOME/build-tools" 2>&1
+            ls "$ANDROID_HOME/ndk" 2>&1
+            ls "$ANDROID_HOME/cmake" 2>&1
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
       - name: Build release APK
+        id: build
         working-directory: MiniCPM-V-demo-Android
         run: |
-          ./gradlew :app:assembleRelease --no-daemon --stacktrace \
+          set -o pipefail
+          ./gradlew :app:assembleRelease --no-daemon --stacktrace --console=plain \
             -PMINICPMV_KEYSTORE="$RUNNER_TEMP/sign/release.jks" \
             -PMINICPMV_KEYSTORE_PASSWORD=minicpmv \
             -PMINICPMV_KEY_ALIAS=minicpmv \
-            -PMINICPMV_KEY_PASSWORD=minicpmv
+            -PMINICPMV_KEY_PASSWORD=minicpmv 2>&1 | tee /tmp/build.log
+          # pipefail is on, but without `exit` the step would inherit tee's
+          # status and a failed build would be reported as green.
+          status=${PIPESTATUS[0]}
+          echo "gradle_exit=$status" >> "$GITHUB_OUTPUT"
+          exit "$status"
+
+      # The run log needs repository admin rights to download through the API,
+      # so surface the tail in the (readable) job summary as well.
+      - name: Show build log tail
+        if: failure()
+        run: |
+          {
+            echo '### Gradle failure (last 150 lines)'
+            echo '```'
+            tail -150 /tmp/build.log 2>/dev/null || echo "no log captured"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: gradle-log
+          path: /tmp/build.log
+          retention-days: 3
 
       - name: Verify and rename
         run: |
