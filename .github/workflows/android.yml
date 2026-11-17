@@ -18,6 +18,14 @@ on:
         description: "Build the Vulkan (Adreno GPU) backend instead of CPU-only"
         type: boolean
         default: false
+      enable_opencl:
+        description: "Vendor the upstream Adreno OpenCL backend (GPU, recommended over Vulkan)"
+        type: boolean
+        default: false
+      enable_hexagon:
+        description: "Vendor the upstream Hexagon NPU backend (V79 skel, prebuilt+signed)"
+        type: boolean
+        default: false
   push:
     branches: [ main, "feat/**" ]
     paths-ignore:
@@ -156,6 +164,50 @@ jobs:
           sed -i 's|^#if defined(GGML_VULKAN_COOPMAT_GLSLC_SUPPORT)$|#if 0 /* coopmat disabled */|' "$F"
           test "$(grep -c '^#if 0 /\* coopmat' "$F")" -eq 9
 
+      # Upstream ships a Snapdragon Android build that already contains the two
+      # backends this fork's registry looks for by name (see
+      # ggml_backend_load_all_from_path: it probes "opencl" and "hexagon").
+      # Reusing those .so avoids needing the Qualcomm OpenCL/Hexagon SDK here.
+      #
+      # Ship only one of them per build: both register as DEVICE_TYPE_GPU, so
+      # with two present llama.cpp would silently pick whichever comes first.
+      - name: Vendor Snapdragon backends
+        if: ${{ inputs.enable_opencl || inputs.enable_hexagon }}
+        run: |
+          set -euo pipefail
+          TAG="b12470"
+          URL="https://github.com/ggml-org/llama.cpp/releases/download/${TAG}/llama-${TAG}-bin-android-arm64-snapdragon.tar.gz"
+          curl -fL --retry 5 --retry-all-errors -o /tmp/snap.tgz "$URL"
+          mkdir -p /tmp/snap && tar xzf /tmp/snap.tgz -C /tmp/snap
+          DEST=MiniCPM-V-demo-Android/app/src/main/jniLibs/arm64-v8a
+          mkdir -p "$DEST"
+
+          copy_one() {
+            local name="$1"
+            local src
+            src=$(find /tmp/snap -name "$name" -type f | head -1)
+            if [ -z "$src" ]; then echo "missing $name in the upstream tarball" >&2; exit 1; fi
+            cp "$src" "$DEST/"
+            echo "$name <- $src ($(stat -c %s "$src") bytes)"
+          }
+
+          if [ "${{ inputs.enable_opencl }}" = "true" ]; then
+            copy_one libggml-opencl.so
+          fi
+          if [ "${{ inputs.enable_hexagon }}" = "true" ]; then
+            copy_one libggml-hexagon.so
+            copy_one libggml-htp-v79.so
+          fi
+
+          # Guard against a wrong-architecture drop-in.
+          for f in "$DEST"/*.so; do
+            case "$f" in
+              *libggml-opencl.so|*libggml-hexagon.so|*libggml-htp-v79.so)
+                file "$f" | grep -q "ARM aarch64" || { echo "$f is not aarch64"; exit 1; }
+                ;;
+            esac
+          done
+
       - name: Prepare signing key
         id: keystore
         env:
@@ -241,7 +293,7 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: apk${{ inputs.enable_vulkan && '-vulkan' || '' }}
+          name: apk${{ inputs.enable_vulkan && '-vulkan' || '' }}${{ inputs.enable_opencl && '-opencl' || '' }}${{ inputs.enable_hexagon && '-hexagon' || '' }}
           path: dist/*.apk
           if-no-files-found: error
           retention-days: 14
@@ -253,6 +305,8 @@ jobs:
             echo "### Android build"
             echo "- QNN packaged: ${{ inputs.enable_qnn || vars.ENABLE_QNN == 'true' }}"
             echo "- Vulkan (Adreno): ${{ inputs.enable_vulkan }}"
+            echo "- OpenCL (Adreno): ${{ inputs.enable_opencl }}"
+            echo "- Hexagon (NPU): ${{ inputs.enable_hexagon }}"
             echo "- Ephemeral signing key: ${{ steps.keystore.outputs.ephemeral }}"
             echo "  (set the KEYSTORE_B64 secret to keep the same signing identity across runs)"
           } >> "$GITHUB_STEP_SUMMARY"

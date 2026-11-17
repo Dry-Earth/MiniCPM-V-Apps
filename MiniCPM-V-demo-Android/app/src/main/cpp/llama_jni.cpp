@@ -179,6 +179,19 @@ static int load_model_impl(JNIEnv *env, jstring jmodel_path, int32_t moe_slot_ba
          __func__, (int) gpu_layers, (int) model_params.split_mode,
          (int) model_params.main_gpu, (int) moe_slot_bank);
 
+    // What did the backend registry actually find? OpenCL and Hexagon both
+    // register as DEVICE_TYPE_GPU, so this is the only way to tell from logcat
+    // whether a dropped-in backend registered at all.
+    for (size_t i = 0; i < ggml_backend_dev_count(); ++i) {
+        ggml_backend_dev_t dev = ggml_backend_dev_get(i);
+        ggml_backend_dev_props props = {};
+        ggml_backend_dev_get_props(dev, &props);
+        LOGi("%s: device[%zu] name=%s type=%d mem=%.0f/%.0f MB", __func__, i,
+             props.name ? props.name : "?",
+             (int) ggml_backend_dev_type(dev),
+             props.memory_free / 1048576.0, props.memory_total / 1048576.0);
+    }
+
     const auto *model_path = env->GetStringUTFChars(jmodel_path, 0);
     LOGi("%s: Loading model from: \n%s\n", __func__, model_path);
 
