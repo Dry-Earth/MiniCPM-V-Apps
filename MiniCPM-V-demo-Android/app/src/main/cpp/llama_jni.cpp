@@ -369,9 +369,15 @@ Java_com_example_minicpm_1v_1demo_LlamaEngine_prepare(JNIEnv * /*env*/, jobject 
     // a larger KV budget than the 4096 default; everything else stays at
     // 4096 to keep memory pressure low on older / non-vision models.
     // Matches the iOS demo's MTMDParams.nCtx = 8192 on V46MultiModel.
+    // The 4.6 family and V4.7 both use the larger KV budget: 4.7-1B ships a
+    // 16x vision tower and up to 10 image chunks, and its iOS client keeps a
+    // 4096 window only because ANE makes prefill cheap. On CPU the same turns
+    // run with 9 slices, so give it the same headroom as 4.6 rather than
+    // letting a long image turn push the context to the shift path.
     const bool is_v46 = (g_minicpmv_version == 46) ||
                         (g_minicpmv_version == 460) ||
-                        (g_minicpmv_version == 461);
+                        (g_minicpmv_version == 461) ||
+                        (g_minicpmv_version == 47);
     const int  n_ctx  = g_override_n_ctx > 0
                         ? g_override_n_ctx
                         : (is_v46 ? V46_CONTEXT_SIZE : DEFAULT_CONTEXT_SIZE);
