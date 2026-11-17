@@ -7,6 +7,9 @@ plugins {
 // The NDK ships the Vulkan headers and the libvulkan.so stub, so the CI job
 // points CMake at them through env vars instead of hardcoding SDK paths here.
 val vulkanEnabled = (providers.gradleProperty("minicpmv.vulkan").orNull ?: "false").toBoolean()
+// Set when the prebuilt Adreno OpenCL / Hexagon backends are dropped into
+// jniLibs; they need two ggml accessors this fork does not define.
+val snapdragonBackends = (providers.gradleProperty("minicpmv.snapdragon").orNull ?: "false").toBoolean()
 
 android {
     namespace = "com.example.minicpm_v_demo"
@@ -51,6 +54,10 @@ android {
                 arguments += "-DLLAMA_CURL=OFF"
                 // 16 KB page size. NDK r27 still defaults to 4 KB LOAD alignment.
                 arguments += "-DANDROID_SUPPORT_FLEXIBLE_PAGE_SIZES=ON"
+
+                if (snapdragonBackends) {
+                    arguments += "-DMINICPMV_SNAPDRAGON_BACKENDS=ON"
+                }
 
                 if (vulkanEnabled) {
                     arguments += "-DGGML_VULKAN=ON"

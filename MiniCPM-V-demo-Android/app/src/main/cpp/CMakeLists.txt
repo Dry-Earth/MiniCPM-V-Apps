@@ -73,6 +73,14 @@ else()
     set(MINICPM_QNN_SOURCES qnn_vit.cpp qnn_vit_jni.cpp)
 endif()
 
+# The vendored Snapdragon backends are built against a slightly newer ggml and
+# reference two accessors this fork does not have yet. Put them in ggml-base,
+# which is the library those backends link against.
+if(MINICPMV_SNAPDRAGON_BACKENDS AND TARGET ggml-base)
+    message(STATUS "Snapdragon backends: adding ggml ABI compatibility shims")
+    target_sources(ggml-base PRIVATE ggml_snapdragon_compat.c)
+endif()
+
 # ggml-vulkan is its own shared object (BUILD_SHARED_LIBS=ON), so the stub's
 # missing Vulkan 1.1 symbol has to be satisfied when *that* library links, not
 # in the app's own .so. Inject the forwarder as a static helper.

@@ -255,11 +255,14 @@ jobs:
         working-directory: MiniCPM-V-demo-Android
         run: |
           set -o pipefail
-          VULKAN_ARG=""
+          EXTRA_ARGS=""
           if [ "${{ inputs.enable_vulkan }}" = "true" ]; then
-            VULKAN_ARG="-Pminicpmv.vulkan=true"
+            EXTRA_ARGS="$EXTRA_ARGS -Pminicpmv.vulkan=true"
           fi
-          ./gradlew :app:assembleRelease --no-daemon --stacktrace --console=plain $VULKAN_ARG \
+          if [ "${{ inputs.enable_opencl }}" = "true" ] || [ "${{ inputs.enable_hexagon }}" = "true" ]; then
+            EXTRA_ARGS="$EXTRA_ARGS -Pminicpmv.snapdragon=true"
+          fi
+          ./gradlew :app:assembleRelease --no-daemon --stacktrace --console=plain $EXTRA_ARGS \
             -PMINICPMV_KEYSTORE="$RUNNER_TEMP/sign/release.jks" \
             -PMINICPMV_KEYSTORE_PASSWORD=minicpmv \
             -PMINICPMV_KEY_ALIAS=minicpmv \
