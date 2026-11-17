@@ -14,6 +14,10 @@ on:
         description: "Also package the Hexagon NPU runtime (downloads QAIRT)"
         type: boolean
         default: false
+      enable_vulkan:
+        description: "Build the Vulkan (Adreno GPU) backend instead of CPU-only"
+        type: boolean
+        default: false
   push:
     branches: [ main, "feat/**" ]
     paths-ignore:
@@ -94,6 +98,23 @@ jobs:
           cp "$QROOT"/lib/hexagon-v79/unsigned/libQnnHtpV79Skel.so "$APP/assets/qnn/"
           cp -r "$QROOT"/include/QNN "$APP/cpp/qnn-include/"
 
+      # Adreno GPU path. The NDK already ships vulkan/vulkan.h and the
+      # libvulkan.so stub, so the host only needs glslc (shader compiler) and
+      # the headers CMake's find_package(Vulkan) looks for.
+      - name: Vulkan toolchain
+        if: ${{ inputs.enable_vulkan }}
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y glslc libvulkan-dev
+          NDK="$ANDROID_HOME/ndk/27.0.12077973"
+          SYSROOT="$NDK/toolchains/llvm/prebuilt/linux-x86_64/sysroot"
+          echo "MINICPMV_GLSLC=$(command -v glslc)" >> "$GITHUB_ENV"
+          echo "MINICPMV_VULKAN_INCLUDE=$SYSROOT/usr/include" >> "$GITHUB_ENV"
+          echo "MINICPMV_VULKAN_LIBRARY=$SYSROOT/usr/lib/aarch64-linux-android/24/libvulkan.so" >> "$GITHUB_ENV"
+          glslc --version | head -2
+          ls -l "$SYSROOT/usr/include/vulkan/vulkan.h" "$SYSROOT/usr/lib/aarch64-linux-android/24/libvulkan.so"
+
       - name: Prepare signing key
         id: keystore
         env:
@@ -131,7 +152,11 @@ jobs:
         working-directory: MiniCPM-V-demo-Android
         run: |
           set -o pipefail
-          ./gradlew :app:assembleRelease --no-daemon --stacktrace --console=plain \
+          VULKAN_ARG=""
+          if [ "${{ inputs.enable_vulkan }}" = "true" ]; then
+            VULKAN_ARG="-Pminicpmv.vulkan=true"
+          fi
+          ./gradlew :app:assembleRelease --no-daemon --stacktrace --console=plain $VULKAN_ARG \
             -PMINICPMV_KEYSTORE="$RUNNER_TEMP/sign/release.jks" \
             -PMINICPMV_KEYSTORE_PASSWORD=minicpmv \
             -PMINICPMV_KEY_ALIAS=minicpmv \
@@ -175,7 +200,7 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: apk
+          name: apk${{ inputs.enable_vulkan && '-vulkan' || '' }}
           path: dist/*.apk
           if-no-files-found: error
           retention-days: 14
@@ -186,6 +211,7 @@ jobs:
           {
             echo "### Android build"
             echo "- QNN packaged: ${{ inputs.enable_qnn || vars.ENABLE_QNN == 'true' }}"
+            echo "- Vulkan (Adreno): ${{ inputs.enable_vulkan }}"
             echo "- Ephemeral signing key: ${{ steps.keystore.outputs.ephemeral }}"
             echo "  (set the KEYSTORE_B64 secret to keep the same signing identity across runs)"
           } >> "$GITHUB_STEP_SUMMARY"

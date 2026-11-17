@@ -305,6 +305,45 @@
                 android:textColor="?android:attr/textColorSecondary"
                 android:textSize="12sp" />
 
+            <!-- GPU layers -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:orientation="horizontal">
+
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="@string/params_gpu_title"
+                    android:textColor="?attr/colorOnSurface"
+                    android:textSize="14sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/tv_gpu_value"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:textColor="?attr/colorPrimary"
+                    android:textSize="14sp" />
+            </LinearLayout>
+
+            <com.google.android.material.slider.Slider
+                android:id="@+id/slider_gpu"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:stepSize="1"
+                android:valueFrom="0"
+                android:valueTo="99" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/params_gpu_hint"
+                android:textColor="?android:attr/textColorSecondary"
+                android:textSize="12sp" />
+
             <!-- MoE expert slots: only meaningful for les.moe models -->
             <LinearLayout
                 android:id="@+id/layout_moe"
@@ -395,11 +434,20 @@
                 android:textSize="13sp" />
 
             <com.google.android.material.button.MaterialButton
+                android:id="@+id/btn_recommend"
+                style="@style/Widget.Material3.Button.TonalButton"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="20dp"
+                android:text="@string/params_recommend"
+                app:cornerRadius="12dp" />
+
+            <com.google.android.material.button.MaterialButton
                 android:id="@+id/btn_reset"
                 style="@style/Widget.Material3.Button.OutlinedButton"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="20dp"
+                android:layout_marginTop="8dp"
                 android:layout_marginBottom="24dp"
                 android:text="@string/params_reset"
                 app:cornerRadius="12dp" />

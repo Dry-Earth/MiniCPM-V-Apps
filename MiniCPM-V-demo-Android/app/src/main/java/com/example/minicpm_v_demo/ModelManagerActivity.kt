@@ -149,6 +149,7 @@ class ModelManagerActivity : AppCompatActivity() {
                     topP = settings.topP,
                     nUbatch = settings.nUbatch,
                     moeSlotBank = settings.effectiveMoeSlotBank(model.isMoe),
+                    gpuLayers = settings.gpuLayers,
                 )
                 if (settings.systemPrompt.isNotBlank()) {
                     engine.setSystemPrompt(settings.systemPrompt)
@@ -374,6 +375,7 @@ class ModelManagerActivity : AppCompatActivity() {
                     topP = settings.topP,
                     nUbatch = settings.nUbatch,
                     moeSlotBank = settings.effectiveMoeSlotBank(model.isMoe),
+                    gpuLayers = settings.gpuLayers,
                 )
                 // Empty by default (no system prompt), matching upstream; a
                 // non-empty one must be injected before the first user turn.

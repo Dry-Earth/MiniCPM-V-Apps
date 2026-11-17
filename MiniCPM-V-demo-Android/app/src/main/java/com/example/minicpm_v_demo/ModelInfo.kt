@@ -68,6 +68,8 @@ data class ModelInfo(
     val customSizeBytes: Long = 0L,
     /** True for `les.moe` GGUFs (routed experts read from the file on demand). */
     val isMoe: Boolean = false,
+    /** MiniCPM-V family code detected from the GGUF metadata (see [GgufProbe]). */
+    val familyVersion: Int = 0,
 ) {
     /** True for text-only models that have no vision projector. */
     val isTextOnly: Boolean

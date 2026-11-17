@@ -27,6 +27,12 @@ data class InferenceSettings(
     /** Resident routed-expert slots for `les.moe` GGUFs. 0 = model default. */
     val moeSlotBank: Int = 0,
     val enableThinking: Boolean = false,
+    /**
+     * Layers handed to the GPU. 0 keeps the model on CPU, 99 asks llama.cpp to
+     * offload everything it can. Only takes effect in a build compiled with
+     * GGML_VULKAN; otherwise llama.cpp logs "no usable GPU" and stays on CPU.
+     */
+    val gpuLayers: Int = 0,
     /** Empty = no system prompt is injected (upstream behaviour). */
     val systemPrompt: String = "",
 ) {
@@ -65,6 +71,7 @@ data class InferenceSettings(
         const val MIN_IMAGE_SLICE = 1
         const val MAX_IMAGE_SLICE = 9
         const val MAX_MOE_SLOT_BANK = 256
+        const val MAX_GPU_LAYERS = 99
         const val DEFAULT_MOE_SLOT_BANK = 256
         const val MOE_SLOT_BANK_STEP = 8
 
@@ -82,6 +89,7 @@ data class InferenceSettings(
         private const val KEY_IMAGE_SLICE = "image_max_slice"
         private const val KEY_MOE_SLOT_BANK = "moe_slot_bank"
         private const val KEY_THINKING = "enable_thinking"
+        private const val KEY_GPU_LAYERS = "gpu_layers"
         private const val KEY_SYSTEM_PROMPT = "system_prompt"
 
         fun load(context: Context): InferenceSettings {
@@ -100,6 +108,7 @@ data class InferenceSettings(
                 moeSlotBank = p.getInt(KEY_MOE_SLOT_BANK, d.moeSlotBank)
                     .coerceIn(0, MAX_MOE_SLOT_BANK),
                 enableThinking = p.getBoolean(KEY_THINKING, d.enableThinking),
+                gpuLayers = p.getInt(KEY_GPU_LAYERS, d.gpuLayers).coerceIn(0, MAX_GPU_LAYERS),
                 systemPrompt = p.getString(KEY_SYSTEM_PROMPT, d.systemPrompt) ?: "",
             )
         }
@@ -115,6 +124,7 @@ data class InferenceSettings(
                 .putInt(KEY_IMAGE_SLICE, settings.imageMaxSlice)
                 .putInt(KEY_MOE_SLOT_BANK, settings.moeSlotBank)
                 .putBoolean(KEY_THINKING, settings.enableThinking)
+                .putInt(KEY_GPU_LAYERS, settings.gpuLayers)
                 .putString(KEY_SYSTEM_PROMPT, settings.systemPrompt)
                 .apply()
         }

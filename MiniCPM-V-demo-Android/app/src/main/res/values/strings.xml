@@ -226,6 +226,11 @@
     <string name="params_moe_hint">仅 35B-A3B 这类专家模型需要；自动 = 256 槽位，越多越快也越占内存</string>
     <string name="params_thinking_title">思考模式</string>
     <string name="params_thinking_hint">先输出 think 过程再回答，支持该模式的模型才有区别</string>
+    <string name="params_gpu_title">GPU 层数</string>
+    <string name="params_gpu_cpu">纯 CPU</string>
+    <string name="params_gpu_hint">0 = 纯 CPU；99 = 尽可能全部交给 Adreno（只有 Vulkan 构建才生效，否则自动留在 CPU）</string>
+    <string name="params_recommend">按本机配置推荐</string>
+    <string name="params_recommend_done">已应用推荐：%1$s</string>
     <string name="params_system_prompt_title">系统提示词</string>
     <string name="params_system_prompt_hint">留空则不注入任何系统提示词（默认行为）</string>
     <string name="toast_settings_applied">参数已更新，正在重新加载模型</string>

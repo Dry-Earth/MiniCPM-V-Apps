@@ -32,6 +32,7 @@ class InferenceSettingsActivity : AppCompatActivity() {
     private lateinit var sliderUbatch: Slider
     private lateinit var sliderSlice: Slider
     private lateinit var sliderMoe: Slider
+    private lateinit var sliderGpu: Slider
     private lateinit var switchThinking: MaterialSwitch
     private lateinit var etSystemPrompt: EditText
     private lateinit var layoutMoe: View
@@ -44,6 +45,7 @@ class InferenceSettingsActivity : AppCompatActivity() {
     private lateinit var tvUbatch: TextView
     private lateinit var tvSlice: TextView
     private lateinit var tvMoe: TextView
+    private lateinit var tvGpu: TextView
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -59,6 +61,7 @@ class InferenceSettingsActivity : AppCompatActivity() {
         sliderUbatch = findViewById(R.id.slider_ubatch)
         sliderSlice = findViewById(R.id.slider_slice)
         sliderMoe = findViewById(R.id.slider_moe)
+        sliderGpu = findViewById(R.id.slider_gpu)
         switchThinking = findViewById(R.id.switch_thinking)
         etSystemPrompt = findViewById(R.id.et_system_prompt)
         layoutMoe = findViewById(R.id.layout_moe)
@@ -71,6 +74,7 @@ class InferenceSettingsActivity : AppCompatActivity() {
         tvUbatch = findViewById(R.id.tv_ubatch_value)
         tvSlice = findViewById(R.id.tv_slice_value)
         tvMoe = findViewById(R.id.tv_moe_value)
+        tvGpu = findViewById(R.id.tv_gpu_value)
 
         settings = InferenceSettings.load(this)
 
@@ -92,6 +96,7 @@ class InferenceSettingsActivity : AppCompatActivity() {
         sliderUbatch.setSafe(settings.nUbatch.toFloat())
         sliderSlice.setSafe(settings.imageMaxSlice.toFloat())
         sliderMoe.setSafe(settings.moeSlotBank.toFloat())
+        sliderGpu.setSafe(settings.gpuLayers.toFloat())
         switchThinking.isChecked = settings.enableThinking
         etSystemPrompt.setText(settings.systemPrompt)
         refreshLabels()
@@ -115,12 +120,21 @@ class InferenceSettingsActivity : AppCompatActivity() {
         sliderUbatch.addOnChangeListener(persist)
         sliderSlice.addOnChangeListener(persist)
         sliderMoe.addOnChangeListener(persist)
+        sliderGpu.addOnChangeListener(persist)
 
         switchThinking.setOnCheckedChangeListener { _, checked ->
             settings = settings.copy(enableThinking = checked)
             // Keep the home screen's think button and the native flag in sync.
             LlamaEngine.setEnableThinkingPref(this, checked)
             InferenceSettings.save(this, settings)
+        }
+
+        findViewById<MaterialButton>(R.id.btn_recommend).setOnClickListener {
+            val rec = DeviceProfile.recommend(this, settings)
+            settings = rec.settings
+            InferenceSettings.save(this, settings)
+            applyToUi()
+            Toast.makeText(this, getString(R.string.params_recommend_done, rec.summary), Toast.LENGTH_LONG).show()
         }
 
         findViewById<MaterialButton>(R.id.btn_reset).setOnClickListener {
@@ -142,6 +156,7 @@ class InferenceSettingsActivity : AppCompatActivity() {
             nUbatch = sliderUbatch.value.roundToInt(),
             imageMaxSlice = sliderSlice.value.roundToInt(),
             moeSlotBank = sliderMoe.value.roundToInt(),
+            gpuLayers = sliderGpu.value.roundToInt(),
         )
     }
 
@@ -158,6 +173,8 @@ class InferenceSettingsActivity : AppCompatActivity() {
         tvSlice.text = sliderSlice.value.roundToInt().toString()
         tvMoe.text = if (sliderMoe.value.roundToInt() == 0) getString(R.string.params_auto)
         else sliderMoe.value.roundToInt().toString()
+        tvGpu.text = if (sliderGpu.value.roundToInt() == 0) getString(R.string.params_gpu_cpu)
+        else sliderGpu.value.roundToInt().toString()
     }
 
     override fun onPause() {

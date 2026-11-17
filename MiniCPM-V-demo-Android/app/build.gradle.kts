@@ -2,6 +2,12 @@ plugins {
     alias(libs.plugins.android.application)
 }
 
+// Opt-in Vulkan backend for the Adreno GPU:
+//   ./gradlew :app:assembleRelease -Pminicpmv.vulkan=true
+// The NDK ships the Vulkan headers and the libvulkan.so stub, so the CI job
+// points CMake at them through env vars instead of hardcoding SDK paths here.
+val vulkanEnabled = (providers.gradleProperty("minicpmv.vulkan").orNull ?: "false").toBoolean()
+
 android {
     namespace = "com.example.minicpm_v_demo"
     compileSdk {
@@ -45,6 +51,13 @@ android {
                 arguments += "-DLLAMA_CURL=OFF"
                 // 16 KB page size. NDK r27 still defaults to 4 KB LOAD alignment.
                 arguments += "-DANDROID_SUPPORT_FLEXIBLE_PAGE_SIZES=ON"
+
+                if (vulkanEnabled) {
+                    arguments += "-DGGML_VULKAN=ON"
+                    System.getenv("MINICPMV_GLSLC")?.let { arguments += "-DVulkan_GLSLC_EXECUTABLE=$it" }
+                    System.getenv("MINICPMV_VULKAN_INCLUDE")?.let { arguments += "-DVulkan_INCLUDE_DIR=$it" }
+                    System.getenv("MINICPMV_VULKAN_LIBRARY")?.let { arguments += "-DVulkan_LIBRARY=$it" }
+                }
             }
         }
     }

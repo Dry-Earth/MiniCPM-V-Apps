@@ -60,6 +60,7 @@ object CustomModelStore {
                         mmprojFileName = if (mmprojMissing) null else mmprojName,
                         isCustom = true,
                         isMoe = obj.optBoolean("moe", false),
+                        familyVersion = obj.optInt("family", 0),
                         customSizeBytes = obj.optLong("gguf_bytes", gguf.length()) +
                             (if (mmprojMissing) 0L else obj.optLong("mmproj_bytes", 0L)),
                     )
@@ -114,10 +115,13 @@ object CustomModelStore {
 
         val ggufFile = File(dir, ggufName)
         val mmprojFile = mmprojName?.let { File(dir, it) }?.takeIf { it.isFile }
-        // Imported `les.moe` GGUFs need moe_slot_bank at load time, exactly like
-        // the built-in 35B-A3B entry; everything else must get 0 or llama.cpp
-        // rejects the load. Sniff the metadata once, at import time.
-        val isMoe = declaresMoeLayout(ggufFile)
+        // Read the metadata once, at import time: family drives the ChatML
+        // prefix (4.6/4.7/OCR differ), and the les.moe flag decides whether
+        // the loader needs a slot bank.
+        val ggufInfo = GgufProbe.read(ggufFile)
+        val mmprojInfo = mmprojFile?.let { GgufProbe.read(it) } ?: GgufProbe.Info()
+        val family = if (mmprojInfo.projectorType != null) mmprojInfo.familyVersion else ggufInfo.familyVersion
+        val isMoe = ggufInfo.hasLesMoe
 
         val entry = JSONObject()
             .put("id", id)
@@ -127,6 +131,7 @@ object CustomModelStore {
             .put("gguf_bytes", ggufFile.length())
             .put("mmproj_bytes", mmprojFile?.length() ?: 0L)
             .put("moe", isMoe)
+            .put("family", family)
         appendEntry(context, entry)
 
         return ModelInfo(
@@ -137,6 +142,7 @@ object CustomModelStore {
             mmprojFileName = mmprojFile?.name,
             isCustom = true,
             isMoe = isMoe,
+            familyVersion = family,
             customSizeBytes = ggufFile.length() + (mmprojFile?.length() ?: 0L),
         )
     }
@@ -189,44 +195,6 @@ object CustomModelStore {
     private fun sanitize(name: String): String {
         val base = name.substringAfterLast('/').substringAfterLast('\\')
         return base.replace(Regex("[^A-Za-z0-9._-]"), "_").ifBlank { "model.gguf" }
-    }
-
-    /**
-     * True when the GGUF declares the `les.moe.layout` metadata key.
-     *
-     * GGUF keeps its key/value block at the start of the file, so scanning the
-     * first 32 MiB is enough even for a 16 GB expert file. A false negative
-     * only costs the user a failed first load; a false positive would make
-     * llama.cpp refuse a dense model, so the needle is the full key name.
-     */
-    private fun declaresMoeLayout(file: File): Boolean {
-        val needle = "les.moe.layout".toByteArray(Charsets.US_ASCII)
-        return try {
-            file.inputStream().use { input ->
-                val head = ByteArray(32 * 1024 * 1024)
-                var filled = 0
-                while (filled < head.size) {
-                    val n = input.read(head, filled, head.size - filled)
-                    if (n <= 0) break
-                    filled += n
-                }
-                indexOf(head, filled, needle) >= 0
-            }
-        } catch (e: Exception) {
-            Log.w(TAG, "could not sniff ${file.name} for les.moe.layout", e)
-            false
-        }
-    }
-
-    private fun indexOf(haystack: ByteArray, length: Int, needle: ByteArray): Int {
-        if (needle.isEmpty() || length < needle.size) return -1
-        outer@ for (i in 0..(length - needle.size)) {
-            for (j in needle.indices) {
-                if (haystack[i + j] != needle[j]) continue@outer
-            }
-            return i
-        }
-        return -1
     }
 
     private fun uniqueId(context: Context, ggufName: String, reservedIds: Collection<String>): String {

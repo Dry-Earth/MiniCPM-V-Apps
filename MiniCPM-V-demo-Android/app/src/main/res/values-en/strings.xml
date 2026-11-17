@@ -223,6 +223,11 @@
     <string name="params_moe_hint">Only used by expert models such as 35B-A3B; auto = 256 slots, more slots is faster and heavier</string>
     <string name="params_thinking_title">Thinking mode</string>
     <string name="params_thinking_hint">Emit a think block before the answer; only models that support it differ</string>
+    <string name="params_gpu_title">GPU layers</string>
+    <string name="params_gpu_cpu">CPU only</string>
+    <string name="params_gpu_hint">0 = CPU only; 99 = offload as much as possible to the Adreno (only effective in a Vulkan build, otherwise it stays on CPU)</string>
+    <string name="params_recommend">Recommend for this device</string>
+    <string name="params_recommend_done">Applied: %1$s</string>
     <string name="params_system_prompt_title">System prompt</string>
     <string name="params_system_prompt_hint">Leave empty to inject nothing (default behaviour)</string>
     <string name="toast_settings_applied">Settings applied, reloading the model</string>

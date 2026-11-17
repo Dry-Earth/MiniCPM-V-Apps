@@ -384,7 +384,9 @@ class LlamaEngine private constructor(
             // OCR 1.0 text tower is Qwen3.5. 471 folds the image into the
             // user turn and uses an empty <think> assistant header.
             "minicpm-ocr-1.0"        -> 471
-            else                     -> 0
+            // Imported models carry whatever GgufProbe read out of their
+            // metadata (projector_type first, then general.name).
+            else                     -> model.familyVersion
         }
 
         private fun modelScopeFileUrl(model: ModelInfo, remotePath: String): URL {
@@ -1013,7 +1015,7 @@ class LlamaEngine private constructor(
     // `les.moe` GGUFs (MiniCPM-V 4.7 35B-A3B) need a non-zero value: the file
     // declares an expert layout, and llama.cpp refuses to load it unless the
     // caller says how many routed experts to keep resident.
-    private external fun loadWithMoe(modelPath: String, moeSlotBank: Int): Int
+    private external fun loadWithMoe(modelPath: String, moeSlotBank: Int, gpuLayers: Int): Int
     // image_max_slice_nums: 1..9 (or -1 for model default).  See JNI for
     // the semantics; the upper layer should pass MIN_IMAGE_SLICE..MAX_IMAGE_SLICE.
     private external fun loadMmproj(mmprojPath: String, imageMaxSliceNums: Int): Int
@@ -1089,6 +1091,7 @@ class LlamaEngine private constructor(
         topP: Float = 1f,
         nUbatch: Int = 0,
         moeSlotBank: Int = 0,
+        gpuLayers: Int = 0,
     ) =
         withContext(llamaDispatcher) {
             check(_state.value is LlamaState.Initialized) {
@@ -1106,7 +1109,7 @@ class LlamaEngine private constructor(
                 _readyForSystemPrompt = false
                 _mmprojLoaded = false
                 _state.value = LlamaState.LoadingModel
-                loadWithMoe(pathToModel, moeSlotBank).let {
+                loadWithMoe(pathToModel, moeSlotBank, gpuLayers).let {
                     if (it != 0) throw RuntimeException("Failed to load model (code: $it)")
                 }
 

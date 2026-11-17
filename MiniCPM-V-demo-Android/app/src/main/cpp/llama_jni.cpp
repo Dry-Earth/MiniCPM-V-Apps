@@ -142,17 +142,26 @@ Java_com_example_minicpm_1v_1demo_LlamaEngine_init(JNIEnv *env, jobject /*unused
 // Shared loader. `moe_slot_bank` only matters for `les.moe` GGUFs (V4.7
 // 35B-A3B): llama.cpp refuses such a file unless the caller declares how many
 // routed experts stay resident, because 0 means "the caller forgot".
-static int load_model_impl(JNIEnv *env, jstring jmodel_path, int32_t moe_slot_bank) {
+static int load_model_impl(JNIEnv *env, jstring jmodel_path, int32_t moe_slot_bank,
+                           int32_t gpu_layers) {
     llama_model_params model_params = llama_model_default_params();
-    // Language model stays on CPU. main_gpu < 0 with split NONE drops the GPU
-    // from this model's device list, so decode is not split across Vulkan.
-    // The vision encoder still picks the GPU on its own.
-    model_params.n_gpu_layers = 0;
-    model_params.split_mode = LLAMA_SPLIT_MODE_NONE;
-    model_params.main_gpu = -1;
+    if (gpu_layers > 0) {
+        // Vulkan build only. Without the backend llama.cpp reports no GPU
+        // devices and falls back to the CPU on its own, so leaving this on in a
+        // CPU-only build is harmless.
+        model_params.n_gpu_layers = gpu_layers;
+        model_params.split_mode = LLAMA_SPLIT_MODE_LAYER;
+        model_params.main_gpu = 0;
+    } else {
+        // CPU only: drop the GPU from this model's device list entirely.
+        model_params.n_gpu_layers = 0;
+        model_params.split_mode = LLAMA_SPLIT_MODE_NONE;
+        model_params.main_gpu = -1;
+    }
     model_params.moe_slot_bank = moe_slot_bank;
-    LOGi("%s: n_gpu_layers=0 split=none main_gpu=-1 moe_slot_bank=%d",
-         __func__, (int) moe_slot_bank);
+    LOGi("%s: n_gpu_layers=%d split=%d main_gpu=%d moe_slot_bank=%d",
+         __func__, (int) gpu_layers, (int) model_params.split_mode,
+         (int) model_params.main_gpu, (int) moe_slot_bank);
 
     const auto *model_path = env->GetStringUTFChars(jmodel_path, 0);
     LOGi("%s: Loading model from: \n%s\n", __func__, model_path);
@@ -182,14 +191,14 @@ static int load_model_impl(JNIEnv *env, jstring jmodel_path, int32_t moe_slot_ba
 extern "C"
 JNIEXPORT jint JNICALL
 Java_com_example_minicpm_1v_1demo_LlamaEngine_load(JNIEnv *env, jobject, jstring jmodel_path) {
-    return load_model_impl(env, jmodel_path, 0);
+    return load_model_impl(env, jmodel_path, 0, 0);
 }
 
 extern "C"
 JNIEXPORT jint JNICALL
 Java_com_example_minicpm_1v_1demo_LlamaEngine_loadWithMoe(JNIEnv *env, jobject, jstring jmodel_path,
-                                                          jint jmoe_slot_bank) {
-    return load_model_impl(env, jmodel_path, (int32_t) jmoe_slot_bank);
+                                                          jint jmoe_slot_bank, jint jgpu_layers) {
+    return load_model_impl(env, jmodel_path, (int32_t) jmoe_slot_bank, (int32_t) jgpu_layers);
 }
 
 extern "C"
