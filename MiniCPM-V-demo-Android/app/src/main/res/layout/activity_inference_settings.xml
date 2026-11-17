@@ -459,6 +459,14 @@
                 app:cornerRadius="12dp" />
 
             <com.google.android.material.button.MaterialButton
+                android:id="@+id/btn_diag"
+                style="@style/Widget.Material3.Button.TextButton"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/params_export_log"
+                app:cornerRadius="12dp" />
+
+            <com.google.android.material.button.MaterialButton
                 android:id="@+id/btn_reset"
                 style="@style/Widget.Material3.Button.OutlinedButton"
                 android:layout_width="match_parent"

@@ -231,6 +231,9 @@
     <string name="params_gpu_hint">0 = 纯 CPU；99 = 尽可能全部交给 Adreno（只有 Vulkan 构建才生效，否则自动留在 CPU）</string>
     <string name="params_vision_gpu_title">视觉塔使用 GPU</string>
     <string name="params_vision_gpu_hint">关闭时图片理解固定在 CPU（更稳）；Vulkan 构建下打开可能崩溃，与上面"GPU 层数"互不影响</string>
+    <string name="params_export_log">导出诊断日志</string>
+    <string name="params_export_log_empty">没读到日志，请用 adb logcat 抓</string>
+    <string name="params_export_log_failed">导出失败：%1$s</string>
     <string name="params_recommend">按本机配置推荐</string>
     <string name="params_recommend_done">已应用推荐：%1$s</string>
     <string name="params_system_prompt_title">系统提示词</string>

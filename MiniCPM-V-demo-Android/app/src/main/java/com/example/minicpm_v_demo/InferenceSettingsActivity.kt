@@ -1,15 +1,22 @@
 package com.example.minicpm_v_demo
 
+import android.content.Intent
 import android.os.Bundle
 import android.view.View
 import android.widget.EditText
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.content.FileProvider
+import androidx.lifecycle.lifecycleScope
 import androidx.appcompat.widget.Toolbar
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.materialswitch.MaterialSwitch
 import com.google.android.material.slider.Slider
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import java.io.File
 import kotlin.math.roundToInt
 
 /**
@@ -137,6 +144,8 @@ class InferenceSettingsActivity : AppCompatActivity() {
             InferenceSettings.save(this, settings)
         }
 
+        findViewById<MaterialButton>(R.id.btn_diag).setOnClickListener { exportDiagnostics() }
+
         findViewById<MaterialButton>(R.id.btn_recommend).setOnClickListener {
             val rec = DeviceProfile.recommend(this, settings)
             settings = rec.settings
@@ -183,6 +192,74 @@ class InferenceSettingsActivity : AppCompatActivity() {
         else sliderMoe.value.roundToInt().toString()
         tvGpu.text = if (sliderGpu.value.roundToInt() == 0) getString(R.string.params_gpu_cpu)
         else sliderGpu.value.roundToInt().toString()
+    }
+
+    /**
+     * Dumps this process's recent logcat to a shareable file.
+     *
+     * Without READ_LOGS an app only sees its own UID's entries, which is exactly
+     * what we need: llama_jni / mtmd / ggml all log under our process. Some ROMs
+     * block exec("logcat") outright, hence the explicit empty-output message.
+     */
+    private fun exportDiagnostics() {
+        lifecycleScope.launch(Dispatchers.IO) {
+            try {
+                val out = try {
+                    ProcessBuilder("logcat", "-d", "-t", "12000")
+                        .redirectErrorStream(true)
+                        .start()
+                        .inputStream.bufferedReader()
+                        .readText()
+                } catch (e: Exception) {
+                    ""
+                }
+                val keep = listOf(
+                    "llama_jni", "mtmd", "ggml", "LlamaEngine", "QnnVit",
+                    "AndroidRuntime", "FATAL", "libc", "minicpm",
+                )
+                val filtered = out.lineSequence()
+                    .filter { line -> keep.any { line.contains(it, ignoreCase = true) } }
+                    .joinToString("\n")
+
+                val dir = File(cacheDir, "diag").apply { mkdirs() }
+                val file = File(dir, "minicpm-diag-${System.currentTimeMillis()}.txt")
+                file.writeText(
+                    buildString {
+                        appendLine("model=${LlamaEngine.getSelectedModel(this@InferenceSettingsActivity).id}")
+                        appendLine("settings=${InferenceSettings.load(this@InferenceSettingsActivity)}")
+                        appendLine("ram=${DeviceProfile.totalRamGb(this@InferenceSettingsActivity)}GB")
+                        appendLine("---")
+                        appendLine(filtered.ifBlank { "(empty)" })
+                    }
+                )
+
+                withContext(Dispatchers.Main) {
+                    if (filtered.isBlank()) {
+                        Toast.makeText(this@InferenceSettingsActivity, R.string.params_export_log_empty, Toast.LENGTH_LONG).show()
+                        return@withContext
+                    }
+                    val uri = FileProvider.getUriForFile(
+                        this@InferenceSettingsActivity,
+                        "$packageName.fileprovider",
+                        file,
+                    )
+                    val send = Intent(Intent.ACTION_SEND).apply {
+                        type = "text/plain"
+                        putExtra(Intent.EXTRA_STREAM, uri)
+                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    }
+                    startActivity(Intent.createChooser(send, getString(R.string.params_export_log)))
+                }
+            } catch (e: Exception) {
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(
+                        this@InferenceSettingsActivity,
+                        getString(R.string.params_export_log_failed, e.message),
+                        Toast.LENGTH_LONG,
+                    ).show()
+                }
+            }
+        }
     }
 
     override fun onPause() {

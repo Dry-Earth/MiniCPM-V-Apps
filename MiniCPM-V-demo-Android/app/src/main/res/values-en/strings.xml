@@ -228,6 +228,9 @@
     <string name="params_gpu_hint">0 = CPU only; 99 = offload as much as possible to the Adreno (only effective in a Vulkan build, otherwise it stays on CPU)</string>
     <string name="params_vision_gpu_title">Vision tower on GPU</string>
     <string name="params_vision_gpu_hint">Off keeps image understanding on the CPU (safer). Independent of the GPU layer count above; may crash in a Vulkan build when on.</string>
+    <string name="params_export_log">Export diagnostics</string>
+    <string name="params_export_log_empty">No logs captured; use adb logcat instead</string>
+    <string name="params_export_log_failed">Export failed: %1$s</string>
     <string name="params_recommend">Recommend for this device</string>
     <string name="params_recommend_done">Applied: %1$s</string>
     <string name="params_system_prompt_title">System prompt</string>
