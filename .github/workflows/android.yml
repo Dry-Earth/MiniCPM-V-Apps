@@ -32,7 +32,7 @@ on:
       - "**.md"
 
 concurrency:
-  group: android-${{ github.ref }}-${{ inputs.enable_vulkan }}
+  group: android-${{ github.ref }}-${{ inputs.enable_vulkan }}-${{ inputs.enable_opencl }}-${{ inputs.enable_hexagon }}
   cancel-in-progress: true
 
 jobs:
