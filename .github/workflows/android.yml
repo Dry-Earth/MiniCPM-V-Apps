@@ -199,14 +199,16 @@ jobs:
             copy_one libggml-htp-v79.so
           fi
 
-          # Guard against a wrong-architecture drop-in.
-          for f in "$DEST"/*.so; do
-            case "$f" in
-              *libggml-opencl.so|*libggml-hexagon.so|*libggml-htp-v79.so)
-                file "$f" | grep -q "ARM aarch64" || { echo "$f is not aarch64"; exit 1; }
-                ;;
-            esac
+          # Guard against a wrong-architecture drop-in. The HTP skel is
+          # deliberately excluded: it is a Hexagon DSP object (ELF for
+          # Q6/Hexagon), not an ARM one.
+          for f in libggml-opencl.so libggml-hexagon.so; do
+            p="$DEST/$f"
+            if [ -f "$p" ]; then
+              file "$p" | grep -q "ARM aarch64" || { echo "$p is not aarch64"; exit 1; }
+            fi
           done
+          file "$DEST"/libggml-htp-v79.so || true
 
       - name: Prepare signing key
         id: keystore
