@@ -73,10 +73,20 @@ else()
     set(MINICPM_QNN_SOURCES qnn_vit.cpp qnn_vit_jni.cpp)
 endif()
 
+# ggml-vulkan is its own shared object (BUILD_SHARED_LIBS=ON), so the stub's
+# missing Vulkan 1.1 symbol has to be satisfied when *that* library links, not
+# in the app's own .so. Inject the forwarder as a static helper.
+if(MINICPMV_VULKAN_BUILD AND TARGET ggml-vulkan)
+    message(STATUS "Vulkan build: linking the 1.1 entry point shim into ggml-vulkan")
+    add_library(vulkan_api_shim STATIC vulkan_api_shim.c)
+    set_target_properties(vulkan_api_shim PROPERTIES POSITION_INDEPENDENT_CODE ON)
+    target_compile_definitions(vulkan_api_shim PRIVATE MINICPMV_VULKAN_SHIM=1)
+    target_link_libraries(ggml-vulkan PRIVATE vulkan_api_shim)
+endif()
+
 add_library(${CMAKE_PROJECT_NAME} SHARED
         llama_jni.cpp
         omni_jni.cpp
-        vulkan_api_shim.c
         ${MINICPM_QNN_SOURCES})
 
 # Only compiled into Vulkan builds: it exists to satisfy a link-time reference
