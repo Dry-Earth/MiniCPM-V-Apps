@@ -56,11 +56,23 @@ if(NOT DEFINED LLAMA_INSTALL_VERSION)
     set(LLAMA_INSTALL_VERSION "0.0.0")
 endif()
 
+# The Hexagon vision path needs Qualcomm's QAIRT 2.51.200 headers, which are
+# not redistributable and therefore not in this repo. Detect them: present ->
+# build the real NPU tower; absent -> link the stub, OCR silently stays on the
+# ggml CPU tower. Override with -DMINICPM_NO_QNN=ON/OFF if needed.
+option(MINICPM_NO_QNN "Force the QNN stub even when qnn-include/ exists" OFF)
+if(MINICPM_NO_QNN OR NOT EXISTS ${CMAKE_CURRENT_LIST_DIR}/qnn-include)
+    message(STATUS "QNN headers not available -> building the stub NPU path")
+    set(MINICPM_QNN_SOURCES qnn_vit_stub.cpp)
+else()
+    message(STATUS "QNN headers found -> building the Hexagon vision path")
+    set(MINICPM_QNN_SOURCES qnn_vit.cpp qnn_vit_jni.cpp)
+endif()
+
 add_library(${CMAKE_PROJECT_NAME} SHARED
         llama_jni.cpp
         omni_jni.cpp
-        qnn_vit.cpp
-        qnn_vit_jni.cpp)
+        ${MINICPM_QNN_SOURCES})
 
 target_compile_definitions(${CMAKE_PROJECT_NAME} PRIVATE
         GGML_SYSTEM_ARCH=${GGML_SYSTEM_ARCH}

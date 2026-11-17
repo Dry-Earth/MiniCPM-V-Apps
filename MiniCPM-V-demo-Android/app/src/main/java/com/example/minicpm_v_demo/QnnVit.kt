@@ -81,7 +81,12 @@ object QnnVit {
      * stays on the CPU vision tower, which is slower but always correct.
      */
     private val SOC_TO_ARCH = linkedMapOf(
-        85 to setOf("SM8750", "SM8750P", "SM8975"),                  // 8 Elite, 8 Elite Gen 5
+        // Snapdragon 8 Elite is Hexagon V79, not V85 (V85 is a later part).
+        // This fork packages the V79 skel, so the entry has to point at 79 or
+        // the NPU path is unreachable. Everything else keeps falling back to
+        // the CPU tower when the matching skeleton is absent.
+        79 to setOf("SM8750", "SM8750P"),                            // 8 Elite
+        81 to setOf("SM8850"),                                       // 8 Elite Gen 5
         75 to setOf("SM8650", "SM8550", "SM7550", "SM7675"),          // 8 Gen 3, 8 Gen 2, 7+ Gen 3, 7+ Gen 2
         73 to setOf("SM8450", "SM8350", "SM7325"),                   // 8 Gen 1, 888, 778G
         69 to setOf("SM8250", "SM8150", "SM7250"),                   // 865, 855, 765G

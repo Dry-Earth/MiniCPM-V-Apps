@@ -59,6 +59,7 @@ static mtmd_context                     * g_ctx_vision;
 // 6  = o-4.0
 // 100045 = o-4.5
 // 46/460/461 = V-4.6 (instruct/thinking)
+// 47 = V-4.7 family (1B dense / 35B-A3B MoE); shares 4.6's ChatML prefix
 static int                                g_minicpmv_version = 0;
 // Most recent slice cap requested by the upper layer.  Persists across
 // loadMmproj calls so a user-chosen value survives e.g. an unload/reload
@@ -138,9 +139,10 @@ Java_com_example_minicpm_1v_1demo_LlamaEngine_init(JNIEnv *env, jobject /*unused
     LOGi("Backend initiated; Log handler set.");
 }
 
-extern "C"
-JNIEXPORT jint JNICALL
-Java_com_example_minicpm_1v_1demo_LlamaEngine_load(JNIEnv *env, jobject, jstring jmodel_path) {
+// Shared loader. `moe_slot_bank` only matters for `les.moe` GGUFs (V4.7
+// 35B-A3B): llama.cpp refuses such a file unless the caller declares how many
+// routed experts stay resident, because 0 means "the caller forgot".
+static int load_model_impl(JNIEnv *env, jstring jmodel_path, int32_t moe_slot_bank) {
     llama_model_params model_params = llama_model_default_params();
     // Language model stays on CPU. main_gpu < 0 with split NONE drops the GPU
     // from this model's device list, so decode is not split across Vulkan.
@@ -148,7 +150,9 @@ Java_com_example_minicpm_1v_1demo_LlamaEngine_load(JNIEnv *env, jobject, jstring
     model_params.n_gpu_layers = 0;
     model_params.split_mode = LLAMA_SPLIT_MODE_NONE;
     model_params.main_gpu = -1;
-    LOGi("%s: n_gpu_layers=0 split=none main_gpu=-1", __func__);
+    model_params.moe_slot_bank = moe_slot_bank;
+    LOGi("%s: n_gpu_layers=0 split=none main_gpu=-1 moe_slot_bank=%d",
+         __func__, (int) moe_slot_bank);
 
     const auto *model_path = env->GetStringUTFChars(jmodel_path, 0);
     LOGi("%s: Loading model from: \n%s\n", __func__, model_path);
@@ -173,6 +177,19 @@ Java_com_example_minicpm_1v_1demo_LlamaEngine_load(JNIEnv *env, jobject, jstring
     g_model = model;
     LOGi("%s: Model loaded successfully!", __func__);
     return 0;
+}
+
+extern "C"
+JNIEXPORT jint JNICALL
+Java_com_example_minicpm_1v_1demo_LlamaEngine_load(JNIEnv *env, jobject, jstring jmodel_path) {
+    return load_model_impl(env, jmodel_path, 0);
+}
+
+extern "C"
+JNIEXPORT jint JNICALL
+Java_com_example_minicpm_1v_1demo_LlamaEngine_loadWithMoe(JNIEnv *env, jobject, jstring jmodel_path,
+                                                          jint jmoe_slot_bank) {
+    return load_model_impl(env, jmodel_path, (int32_t) jmoe_slot_bank);
 }
 
 extern "C"
@@ -389,6 +406,10 @@ static const char * assistant_turn_prefix() {
         case 46:
         case 460:
         case 461:
+        // V4.7 inherits the Qwen3.5 ChatML layout and the same thinking
+        // toggle, so it shares this branch. Only the vision tower differs,
+        // and mtmd resolves that from the mmproj GGUF itself.
+        case 47:
             return g_enable_thinking
                 ? "<|im_start|>assistant\n<think>\n"
                 : "<|im_start|>assistant\n<think>\n\n</think>\n\n";

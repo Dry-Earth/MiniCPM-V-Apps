@@ -96,6 +96,7 @@ class LlamaEngine private constructor(
 
         fun getSelectedModel(context: Context): ModelInfo {
             val modelId = prefs(context).getString(KEY_SELECTED_MODEL, ModelInfo.DEFAULT_MODEL.id) ?: ModelInfo.DEFAULT_MODEL.id
+            CustomModelStore.find(context, modelId)?.let { return it }
             return ModelInfo.AVAILABLE_MODELS.find { it.id == modelId } ?: ModelInfo.DEFAULT_MODEL
         }
 
@@ -375,6 +376,11 @@ class LlamaEngine private constructor(
         fun inferMinicpmvVersion(model: ModelInfo): Int = when (model.id) {
             "minicpm-v-4_6-instruct" -> 46
             "minicpm-v-4"            -> 5
+            // V4.7 uses the same ChatML assistant prefix as 4.6 (and the same
+            // thinking toggle); only the vision tower differs, and that is
+            // resolved from the GGUF itself.
+            "minicpm-v-4_7-1b",
+            "minicpm-v-4_7-35b-a3b"  -> 47
             // OCR 1.0 text tower is Qwen3.5. 471 folds the image into the
             // user turn and uses an empty <think> assistant header.
             "minicpm-ocr-1.0"        -> 471
@@ -433,27 +439,27 @@ class LlamaEngine private constructor(
             val acousticSources = mutableListOf<FileSource>()
             val layoutSources = mutableListOf<FileSource>()
 
-            if (model.hasHfMsSources) {
-                val hfBase = "https://huggingface.co/${model.hfRepo}/resolve/${model.hfBranch}"
-                ggufSources.add(FileSource("HuggingFace", URL("$hfBase/${model.ggufRemotePath}")))
-                ggufSources.add(FileSource("ModelScope", modelScopeFileUrl(model, model.ggufRemotePath)))
-                if (model.isTts) {
-                    model.acousticRemotePath?.let { rp ->
-                        acousticSources.add(FileSource("HuggingFace", URL("$hfBase/$rp")))
-                        acousticSources.add(FileSource("ModelScope", modelScopeFileUrl(model, rp)))
-                    }
-                } else if (!model.isTextOnly) {
-                    model.mmprojRemotePath?.let { rp ->
-                        mmprojSources.add(FileSource("HuggingFace", URL("$hfBase/$rp")))
-                        mmprojSources.add(FileSource("ModelScope", modelScopeFileUrl(model, rp)))
-                    }
+            // Each remote is registered independently: most models are on both
+            // HF and ModelScope, but the V4.7 35B-A3B GGUF is HF-only.
+            fun addRemoteSources(target: MutableList<FileSource>, remotePath: String?) {
+                if (remotePath.isNullOrBlank()) return
+                if (model.hasHfSource) {
+                    val hfBase = "https://huggingface.co/${model.hfRepo}/resolve/${model.hfBranch}"
+                    target.add(FileSource("HuggingFace", URL("$hfBase/$remotePath")))
                 }
-                if (model.isOcr) {
-                    model.layoutRemotePath?.let { rp ->
-                        layoutSources.add(FileSource("HuggingFace", URL("$hfBase/$rp")))
-                        layoutSources.add(FileSource("ModelScope", modelScopeFileUrl(model, rp)))
-                    }
+                if (model.hasMsSource) {
+                    target.add(FileSource("ModelScope", modelScopeFileUrl(model, remotePath)))
                 }
+            }
+
+            addRemoteSources(ggufSources, model.ggufRemotePath)
+            if (model.isTts) {
+                addRemoteSources(acousticSources, model.acousticRemotePath)
+            } else if (!model.isTextOnly) {
+                addRemoteSources(mmprojSources, model.mmprojRemotePath)
+            }
+            if (model.isOcr) {
+                addRemoteSources(layoutSources, model.layoutRemotePath)
             }
             if (!model.directGgufUrl.isNullOrBlank()) {
                 ggufSources.add(FileSource(context.getString(R.string.source_direct), URL(model.directGgufUrl)))
@@ -503,16 +509,19 @@ class LlamaEngine private constructor(
             // and a failure never blocks the model: OCR simply stays on the CPU
             // tower. 868 MiB is a large tail, so it is announced separately
             // rather than hidden inside the model progress.
-            if (model.isOcr && model.hasHfMsSources) {
+            if (model.isOcr && (model.hasHfSource || model.hasMsSource)) {
                 val arch = QnnVit.deviceArch(context)
                 if (arch != null && model.qnnArchMd5.containsKey(arch)) {
                     val name = QnnVit.binaryNameFor(arch)
                     val remote = (model.qnnRemoteDir ?: "") + name
-                    val hfBase = "https://huggingface.co/${model.hfRepo}/resolve/${model.hfBranch}"
-                    val qnnSources = listOf(
-                        FileSource("HuggingFace", URL("$hfBase/$remote")),
-                        FileSource("ModelScope", modelScopeFileUrl(model, remote)),
-                    )
+                    val qnnSources = mutableListOf<FileSource>()
+                    if (model.hasHfSource) {
+                        val hfBase = "https://huggingface.co/${model.hfRepo}/resolve/${model.hfBranch}"
+                        qnnSources.add(FileSource("HuggingFace", URL("$hfBase/$remote")))
+                    }
+                    if (model.hasMsSource) {
+                        qnnSources.add(FileSource("ModelScope", modelScopeFileUrl(model, remote)))
+                    }
                     onProgress(context.getString(R.string.download_qnn_start, name))
                     try {
                         downloadFileMultiSource(context, dir, name, qnnSources,
@@ -1000,6 +1009,11 @@ class LlamaEngine private constructor(
 
     private external fun init(nativeLibDir: String)
     private external fun load(modelPath: String): Int
+    // Same as [load] but threads `moe_slot_bank` into llama_model_params. Only
+    // `les.moe` GGUFs (MiniCPM-V 4.7 35B-A3B) need a non-zero value: the file
+    // declares an expert layout, and llama.cpp refuses to load it unless the
+    // caller says how many routed experts to keep resident.
+    private external fun loadWithMoe(modelPath: String, moeSlotBank: Int): Int
     // image_max_slice_nums: 1..9 (or -1 for model default).  See JNI for
     // the semantics; the upper layer should pass MIN_IMAGE_SLICE..MAX_IMAGE_SLICE.
     private external fun loadMmproj(mmprojPath: String, imageMaxSliceNums: Int): Int
@@ -1074,6 +1088,7 @@ class LlamaEngine private constructor(
         topK: Int = 0,
         topP: Float = 1f,
         nUbatch: Int = 0,
+        moeSlotBank: Int = 0,
     ) =
         withContext(llamaDispatcher) {
             check(_state.value is LlamaState.Initialized) {
@@ -1091,7 +1106,7 @@ class LlamaEngine private constructor(
                 _readyForSystemPrompt = false
                 _mmprojLoaded = false
                 _state.value = LlamaState.LoadingModel
-                load(pathToModel).let {
+                loadWithMoe(pathToModel, moeSlotBank).let {
                     if (it != 0) throw RuntimeException("Failed to load model (code: $it)")
                 }
 
@@ -1223,7 +1238,7 @@ class LlamaEngine private constructor(
         get() {
             if (!_mmprojLoaded) return false
             val v = try { getMinicpmvVersionNative() } catch (_: Throwable) { 0 }
-            return v == 46 || v == 460 || v == 461
+            return v == 46 || v == 460 || v == 461 || v == 47
         }
 
     /**

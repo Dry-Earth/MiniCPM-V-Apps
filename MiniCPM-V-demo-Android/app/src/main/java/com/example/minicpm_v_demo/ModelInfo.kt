@@ -62,6 +62,12 @@ data class ModelInfo(
     val mmprojMd5: String? = null,
     val acousticMd5: String? = null,
     val layoutMd5: String? = null,
+    /** Set for models imported from device storage; see [CustomModelStore]. */
+    val isCustom: Boolean = false,
+    /** Bytes on disk for an imported model, used by the description line. */
+    val customSizeBytes: Long = 0L,
+    /** True for `les.moe` GGUFs (routed experts read from the file on demand). */
+    val isMoe: Boolean = false,
 ) {
     /** True for text-only models that have no vision projector. */
     val isTextOnly: Boolean
@@ -75,11 +81,17 @@ data class ModelInfo(
     val isOcr: Boolean
         get() = layoutFileName != null
 
-    /** MiniCPM5 (text) and MiniCPM-V-4.6 expose a thinking toggle. */
+    /** MiniCPM5 (text), MiniCPM-V-4.6 and the V4.7 family expose a thinking toggle. */
     val supportsThinking: Boolean
-        get() = isTextOnly || id == "minicpm-v-4_6-instruct"
+        get() = isTextOnly ||
+            id == "minicpm-v-4_6-instruct" ||
+            id == "minicpm-v-4_7-1b" ||
+            id == "minicpm-v-4_7-35b-a3b"
 
     fun getDescription(context: Context): String {
+        if (isCustom) {
+            return context.getString(R.string.custom_model_desc, formatBytes(customSizeBytes))
+        }
         val resId = context.resources.getIdentifier(descriptionResName, "string", context.packageName)
         return if (resId != 0) context.getString(resId) else descriptionResName
     }
@@ -107,9 +119,22 @@ data class ModelInfo(
 
     /** Whether the model registers HF + MS repos for racing. */
     val hasHfMsSources: Boolean
-        get() = !hfRepo.isNullOrBlank() && !msRepo.isNullOrBlank()
+        get() = hasHfSource && hasMsSource
+
+    /** Either remote source may be absent (e.g. the V4.7 MoE ships on HF only). */
+    val hasHfSource: Boolean
+        get() = !hfRepo.isNullOrBlank()
+
+    val hasMsSource: Boolean
+        get() = !msRepo.isNullOrBlank()
 
     companion object {
+        private fun formatBytes(bytes: Long): String = when {
+            bytes <= 0L -> "—"
+            bytes >= 1L shl 30 -> String.format(java.util.Locale.US, "%.2f GB", bytes / 1073741824.0)
+            else -> String.format(java.util.Locale.US, "%.0f MB", bytes / 1048576.0)
+        }
+
         val AVAILABLE_MODELS = listOf(
             ModelInfo(
                 id = "minicpm-v-4",
@@ -143,6 +168,39 @@ data class ModelInfo(
                 // both HuggingFace and ModelScope. Replaces the previous
                 // OBS-only `aad0d36e..` merger-converted variant.
                 mmprojMd5 = "54aea6e04d752f47309a48f12795a1a3"
+            ),
+            // MiniCPM-V 4.7 1B (dense). Text tower is qwen35; the vision tower
+            // is `clip.projector_type=minicpmv4_7`, which the bundled mtmd
+            // resolves natively (same llava-uhd slicing as 4.6). Both files
+            // live under a per-model subdirectory on the shared tc-mb repo, so
+            // the remote names carry the prefix while the local ones do not.
+            ModelInfo(
+                id = "minicpm-v-4_7-1b",
+                displayName = "MiniCPM-V 4.7 1B (Q4_K_M)",
+                descriptionResName = "model_desc_v47_1b",
+                ggufFileName = "MiniCPM-V-4_7-1B-Q4_K_M.gguf",
+                mmprojFileName = "mmproj-model-f16.gguf",
+                hfRepo = "tc-mb/MiniCPM-V-Apps-gguf",
+                msRepo = "zerg13/MiniCPM-V-Apps-gguf",
+                ggufRemoteName = "MiniCPM-V-4.7-1B/MiniCPM-V-4_7-1B-Q4_K_M.gguf",
+                mmprojRemoteName = "MiniCPM-V-4.7-1B/mmproj-model-f16.gguf"
+            ),
+            // MiniCPM-V 4.7 35B-A3B (MoE, ~3B active). The GGUF is the
+            // `LCO-` build: routed experts are re-ordered expert-major and
+            // inlined after the dense weights, described by the file's own
+            // `les.moe.layout`. Feeding the plain upstream `mix_q3gud_im.gguf`
+            // to this engine does not work. HF only — there is no ModelScope
+            // mirror, so the downloader runs HF-only (see hasHfMsSources).
+            // Loading it needs InferenceSettings.moeSlotBank > 0.
+            ModelInfo(
+                id = "minicpm-v-4_7-35b-a3b",
+                displayName = "MiniCPM-V 4.7 35B-A3B (Q3_K)",
+                descriptionResName = "model_desc_v47_35b",
+                ggufFileName = "LCO-MiniCPM-V-4_7-35B-A3B-mix_q3gud_im.gguf",
+                mmprojFileName = "mmproj-model-f16.gguf",
+                hfRepo = "LComni/LCO-MiniCPM-V-4.7-35B-A3B-gguf",
+                msRepo = null,
+                isMoe = true
             ),
             // MiniCPM5-1B: text-only model, no mmproj needed. Switched from the
             // pre-release OBS direct link to OpenBMB's official HF (primary) +
