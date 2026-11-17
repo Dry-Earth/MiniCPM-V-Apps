@@ -43,6 +43,10 @@ jobs:
   apk:
     runs-on: ubuntu-latest
     timeout-minutes: 150
+    # Needed by the optional "publish to a release" step: the default fork token
+    # is read-only and asset upload answers 403.
+    permissions:
+      contents: write
     env:
       ANDROID_NDK_VERSION: "27.0.12077973"
       CMAKE_VERSION: "4.1.2"
